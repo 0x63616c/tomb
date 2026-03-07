@@ -1,0 +1,38 @@
+[package]
+name = "tomb"
+version = "0.1.0"
+edition = "2021"
+description = "Encrypt anything with a passphrase. Recover it decades later."
+
+[dependencies]
+# Cipher layers (CTR mode for all)
+aes = "0.8"
+ctr = "0.9"
+twofish = "0.7"
+chacha20 = "0.9"
+
+# Key derivation chain
+scrypt = "0.11"
+argon2 = "0.5"
+
+# Key expansion + per-layer auth + commitment
+hkdf = "0.12"
+sha2 = "0.10"
+hmac = "0.12"
+
+# Memory safety + constant time
+zeroize = { version = "1", features = ["derive"] }
+subtle = "2"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Randomness
+rand = "0.8"
+
+# Passphrase entry (no echo)
+rpassword = "7"
+
+[profile.release]
+strip = true
+lto = true
