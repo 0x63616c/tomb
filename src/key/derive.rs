@@ -89,6 +89,7 @@ pub fn chain_derive(
         prk.expand(label.as_bytes(), &mut kdf_salt)
             .map_err(|_| Error::KeyExpansion)?;
         let result = kdf.derive(&input, &kdf_salt)?;
+        kdf_salt.zeroize();
         input.zeroize();
         input = result.as_bytes().to_vec();
     }

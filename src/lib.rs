@@ -33,7 +33,6 @@ pub enum Error {
     DecryptionFailed,
     Encryption(String),
     KeyExpansion,
-    CommitmentMismatch,
     Format(String),
     VerificationFailed,
     PassphraseMismatch,
@@ -50,7 +49,6 @@ impl fmt::Display for Error {
             Self::DecryptionFailed => write!(f, "decryption failed"),
             Self::Encryption(msg) => write!(f, "encryption error: {msg}"),
             Self::KeyExpansion => write!(f, "key expansion failed"),
-            Self::CommitmentMismatch => write!(f, "key commitment mismatch"),
             Self::Format(msg) => write!(f, "format error: {msg}"),
             Self::VerificationFailed => write!(f, "verification failed: sealed file does not match original"),
             Self::PassphraseMismatch => write!(f, "passphrases do not match"),
@@ -221,20 +219,32 @@ pub fn open_file_with_params(
     let states = expand_layer_keys(&master, &layer_info)?;
 
     let sealed_body = &tomb_data[header_len..];
-    let decrypted = pipeline.open(&states, sealed_body)?;
+    let mut decrypted = pipeline.open(&states, sealed_body)?;
 
     // Parse inner header
     let (inner, inner_len) = format::InnerHeader::deserialize(&decrypted)?;
-    let plaintext = &decrypted[inner_len..inner_len + inner.original_size as usize];
-
-    // Verify SHA-512 checksum (constant-time)
-    let checksum: [u8; 64] = Sha512::digest(plaintext).into();
-    if !bool::from(checksum[..].ct_eq(&inner.checksum[..])) {
+    let original_size = inner.original_size as usize;
+    let plaintext_end = inner_len.checked_add(original_size)
+        .ok_or(Error::DecryptionFailed)?;
+    if plaintext_end > decrypted.len() {
+        decrypted.zeroize();
         return Err(Error::DecryptionFailed);
     }
 
+    // Copy plaintext before zeroizing the full decrypted buffer
+    let plaintext_data = decrypted[inner_len..plaintext_end].to_vec();
+
+    // Verify SHA-512 checksum (constant-time)
+    let checksum: [u8; 64] = Sha512::digest(&plaintext_data).into();
+    if !bool::from(checksum[..].ct_eq(&inner.checksum[..])) {
+        decrypted.zeroize();
+        return Err(Error::DecryptionFailed);
+    }
+
+    decrypted.zeroize();
+
     Ok(OpenedFile {
-        data: plaintext.to_vec(),
+        data: plaintext_data,
         filename: inner.filename,
     })
 }
@@ -260,7 +270,7 @@ pub fn seal_with_params(
     passphrase: &Passphrase,
     note: Option<&str>,
 ) -> Result<()> {
-    let prepared = prepare_payload(input_path, note)?;
+    let mut prepared = prepare_payload(input_path, note)?;
     let pipeline = Pipeline::default_tomb();
     let keys = derive_keys_with_params(passphrase, &pipeline)?;
 
@@ -277,6 +287,7 @@ pub fn seal_with_params(
     };
 
     encrypt_and_write(output_path, &header, &pipeline, &keys.states, &prepared.padded)?;
+    prepared.padded.zeroize();
     verify_sealed(output_path, passphrase, &prepared.checksum, ScryptDerive::test(), Argon2idDerive::test())?;
 
     Ok(())
@@ -288,7 +299,7 @@ pub fn seal(
     passphrase: &Passphrase,
     note: Option<&str>,
 ) -> Result<()> {
-    let prepared = prepare_payload(input_path, note)?;
+    let mut prepared = prepare_payload(input_path, note)?;
     let pipeline = Pipeline::default_tomb();
     let keys = derive_keys(passphrase, &pipeline)?;
 
@@ -305,6 +316,7 @@ pub fn seal(
     };
 
     encrypt_and_write(output_path, &header, &pipeline, &keys.states, &prepared.padded)?;
+    prepared.padded.zeroize();
     verify_sealed(output_path, passphrase, &prepared.checksum, ScryptDerive::production(), Argon2idDerive::production())?;
 
     Ok(())

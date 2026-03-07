@@ -45,7 +45,7 @@ pub enum Command {
 
 fn prompt_passphrase(prompt: &str) -> Result<String> {
     let pass = rpassword::prompt_password(prompt)
-        .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e)))?;
+        .map_err(|e| Error::Io(io::Error::other(e)))?;
     Ok(pass)
 }
 
@@ -57,7 +57,7 @@ fn prompt_passphrase_for_seal() -> Result<Passphrase> {
 
     let mut choice = String::new();
     io::stdin().read_line(&mut choice)
-        .map_err(|e| Error::Io(e))?;
+        .map_err(Error::Io)?;
 
     match choice.trim() {
         "1" => {

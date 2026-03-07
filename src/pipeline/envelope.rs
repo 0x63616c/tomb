@@ -43,9 +43,11 @@ impl LayerEnvelope {
         }
 
         let nonce = data[2..payload_len_start].to_vec();
-        let payload_len = u64::from_le_bytes(
+        let payload_len_u64 = u64::from_le_bytes(
             data[payload_len_start..payload_len_end].try_into().unwrap()
-        ) as usize;
+        );
+        let payload_len: usize = payload_len_u64.try_into()
+            .map_err(|_| Error::Format("payload length exceeds platform address space".into()))?;
 
         let payload_start = payload_len_end;
         let payload_end = payload_start.checked_add(payload_len)

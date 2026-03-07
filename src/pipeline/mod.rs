@@ -2,6 +2,8 @@ pub mod envelope;
 
 use std::collections::HashSet;
 
+use zeroize::Zeroize;
+
 use crate::cipher::CipherLayer;
 use crate::cipher::twofish::TwofishCtr;
 use crate::cipher::aes::AesCtr;
@@ -48,6 +50,7 @@ impl Pipeline {
 
         for (layer, state) in self.layers.iter().zip(states.iter()) {
             let encrypted = layer.encrypt(&state.encrypt_key, &state.nonce, &data)?;
+            data.zeroize();
             let mac = LayerEnvelope::compute_mac(
                 &state.mac_key, layer.id(), &state.nonce, &encrypted,
             );
@@ -69,10 +72,13 @@ impl Pipeline {
             let env = LayerEnvelope::deserialize(&data)?;
 
             if !env.verify_mac(&state.mac_key) {
+                data.zeroize();
                 return Err(Error::DecryptionFailed);
             }
 
-            data = layer.decrypt(&state.encrypt_key, &env.nonce, &env.payload)?;
+            let decrypted = layer.decrypt(&state.encrypt_key, &env.nonce, &env.payload)?;
+            data.zeroize();
+            data = decrypted;
         }
 
         Ok(data)

@@ -1,4 +1,4 @@
-pub const EFF_WORDLIST: [&str; 7776] = [
+pub static EFF_WORDLIST: [&str; 7776] = [
     "abacus",
     "abdomen",
     "abdominal",
