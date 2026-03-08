@@ -14,6 +14,12 @@ use crate::{Error, Result, SealConfig};
 #[command(
     name = "tomb",
     version,
+    long_version = concat!(
+        env!("CARGO_PKG_VERSION"),
+        " (",
+        env!("TOMB_GIT_SHA"),
+        ")"
+    ),
     about = "Encrypt anything with a passphrase. Recover it decades later.",
     arg_required_else_help = true,
     after_help = "Examples:
