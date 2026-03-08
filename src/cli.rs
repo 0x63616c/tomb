@@ -164,6 +164,7 @@ pub fn run() -> Result<()> {
                 sign,
                 overhead
             );
+            println!("Run 'tomb verify {}' to confirm the file is decryptable.", output.display());
             println!("Remember to delete the original file.");
         }
         Command::Open { file, output } => {
