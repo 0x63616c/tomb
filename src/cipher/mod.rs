@@ -37,7 +37,7 @@ impl TryFrom<u8> for CipherId {
 }
 
 pub trait CipherLayer {
-    fn id(&self) -> u8;
+    fn id(&self) -> CipherId;
     fn name(&self) -> &str;
     fn encrypt_label(&self) -> &'static str;
     fn mac_label(&self) -> &'static str;

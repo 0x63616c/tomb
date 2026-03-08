@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use zeroize::Zeroize;
 
-use crate::cipher::CipherLayer;
+use crate::cipher::{CipherLayer, CipherId};
 use crate::cipher::twofish::TwofishCtr;
 use crate::cipher::aes::AesCtr;
 use crate::cipher::xchacha::XChaCha;
@@ -31,7 +31,7 @@ impl Pipeline {
 
     pub fn layer_descriptors(&self) -> Vec<LayerDescriptor> {
         self.layers.iter()
-            .map(|l| LayerDescriptor { id: l.id(), nonce_size: l.nonce_size() as u8 })
+            .map(|l| LayerDescriptor { id: l.id() as u8, nonce_size: l.nonce_size() as u8 })
             .collect()
     }
 
@@ -86,7 +86,10 @@ impl Pipeline {
 
     pub fn build_from_header(header: &PublicHeader) -> Result<Self> {
         let layers: Vec<Box<dyn CipherLayer>> = header.layers.iter()
-            .map(|desc| cipher_by_id(desc.id))
+            .map(|desc| -> Result<Box<dyn CipherLayer>> {
+                let id = CipherId::try_from(desc.id)?;
+                Ok(cipher_by_id(id))
+            })
             .collect::<Result<_>>()?;
         validate_no_duplicate_ids(&layers)?;
         Ok(Self { layers })
@@ -98,7 +101,7 @@ fn validate_no_duplicate_ids(layers: &[Box<dyn CipherLayer>]) -> Result<()> {
     for layer in layers {
         if !seen.insert(layer.id()) {
             return Err(Error::Format(
-                format!("duplicate layer ID 0x{:02x}", layer.id())
+                format!("duplicate cipher layer: {:?}", layer.id())
             ));
         }
     }
@@ -147,9 +150,9 @@ mod tests {
         let pipeline = Pipeline::default_tomb();
         let descs = pipeline.layer_descriptors();
         assert_eq!(descs.len(), 3);
-        assert_eq!(descs[0].id, 0x20);
-        assert_eq!(descs[1].id, 0x21);
-        assert_eq!(descs[2].id, 0x22);
+        assert_eq!(descs[0].id, CipherId::Twofish as u8);
+        assert_eq!(descs[1].id, CipherId::Aes as u8);
+        assert_eq!(descs[2].id, CipherId::XChaCha as u8);
     }
 
     #[test]
@@ -176,9 +179,9 @@ mod tests {
         };
         let rebuilt = Pipeline::build_from_header(&header).unwrap();
         assert_eq!(rebuilt.layers.len(), 3);
-        assert_eq!(rebuilt.layers[0].id(), 0x20);
-        assert_eq!(rebuilt.layers[1].id(), 0x21);
-        assert_eq!(rebuilt.layers[2].id(), 0x22);
+        assert_eq!(rebuilt.layers[0].id(), CipherId::Twofish);
+        assert_eq!(rebuilt.layers[1].id(), CipherId::Aes);
+        assert_eq!(rebuilt.layers[2].id(), CipherId::XChaCha);
     }
 
     #[test]
@@ -188,14 +191,14 @@ mod tests {
             version_minor: 0,
             kdf_chain: vec![],
             layers: vec![
-                LayerDescriptor { id: 0x20, nonce_size: 16 },
-                LayerDescriptor { id: 0x20, nonce_size: 16 },
+                LayerDescriptor { id: CipherId::Twofish as u8, nonce_size: 16 },
+                LayerDescriptor { id: CipherId::Twofish as u8, nonce_size: 16 },
             ],
             salt: vec![0; 32],
             commitment: vec![0; 32],
         };
         let err = Pipeline::build_from_header(&header).err().expect("should fail");
-        assert!(format!("{err}").contains("duplicate layer ID"));
+        assert!(format!("{err}").contains("duplicate cipher layer"));
     }
 
     #[test]

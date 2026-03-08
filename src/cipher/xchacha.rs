@@ -1,4 +1,4 @@
-use crate::cipher::CipherLayer;
+use crate::cipher::{CipherLayer, CipherId};
 use crate::key::LayerKey;
 use crate::Result;
 
@@ -8,7 +8,7 @@ use chacha20::cipher::{KeyIvInit, StreamCipher};
 pub struct XChaCha;
 
 impl CipherLayer for XChaCha {
-    fn id(&self) -> u8 { 0x22 }
+    fn id(&self) -> CipherId { CipherId::XChaCha }
     fn name(&self) -> &str { "xchacha20" }
     fn encrypt_label(&self) -> &'static str { "tomb-xchacha20" }
     fn mac_label(&self) -> &'static str { "tomb-xchacha20-mac" }
@@ -49,7 +49,7 @@ mod tests {
     #[test]
     fn xchacha_metadata() {
         let c = XChaCha;
-        assert_eq!(c.id(), 0x22);
+        assert_eq!(c.id(), CipherId::XChaCha);
         assert_eq!(c.key_size(), 32);
         assert_eq!(c.nonce_size(), 24);
     }

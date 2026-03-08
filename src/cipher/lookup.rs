@@ -1,15 +1,13 @@
-use crate::cipher::CipherLayer;
+use crate::cipher::{CipherLayer, CipherId};
 use crate::cipher::twofish::TwofishCtr;
 use crate::cipher::aes::AesCtr;
 use crate::cipher::xchacha::XChaCha;
-use crate::{Error, Result};
 
-pub fn cipher_by_id(id: u8) -> Result<Box<dyn CipherLayer>> {
+pub fn cipher_by_id(id: CipherId) -> Box<dyn CipherLayer> {
     match id {
-        0x20 => Ok(Box::new(TwofishCtr)),
-        0x21 => Ok(Box::new(AesCtr)),
-        0x22 => Ok(Box::new(XChaCha)),
-        _ => Err(Error::UnknownLayer(id)),
+        CipherId::Twofish => Box::new(TwofishCtr),
+        CipherId::Aes => Box::new(AesCtr),
+        CipherId::XChaCha => Box::new(XChaCha),
     }
 }
 
@@ -19,24 +17,19 @@ mod tests {
 
     #[test]
     fn lookup_twofish() {
-        let c = cipher_by_id(0x20).unwrap();
-        assert_eq!(c.id(), 0x20);
+        let c = cipher_by_id(CipherId::Twofish);
+        assert_eq!(c.id(), CipherId::Twofish);
     }
 
     #[test]
     fn lookup_aes() {
-        let c = cipher_by_id(0x21).unwrap();
-        assert_eq!(c.id(), 0x21);
+        let c = cipher_by_id(CipherId::Aes);
+        assert_eq!(c.id(), CipherId::Aes);
     }
 
     #[test]
     fn lookup_xchacha() {
-        let c = cipher_by_id(0x22).unwrap();
-        assert_eq!(c.id(), 0x22);
-    }
-
-    #[test]
-    fn lookup_unknown_fails() {
-        assert!(cipher_by_id(0xFF).is_err());
+        let c = cipher_by_id(CipherId::XChaCha);
+        assert_eq!(c.id(), CipherId::XChaCha);
     }
 }

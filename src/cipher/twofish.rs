@@ -1,4 +1,4 @@
-use crate::cipher::CipherLayer;
+use crate::cipher::{CipherLayer, CipherId};
 use crate::key::LayerKey;
 use crate::Result;
 
@@ -10,7 +10,7 @@ type TwofishCtrMode = ctr::Ctr128BE<Twofish>;
 pub struct TwofishCtr;
 
 impl CipherLayer for TwofishCtr {
-    fn id(&self) -> u8 { 0x20 }
+    fn id(&self) -> CipherId { CipherId::Twofish }
     fn name(&self) -> &str { "twofish-256-ctr" }
     fn encrypt_label(&self) -> &'static str { "tomb-twofish-256-ctr" }
     fn mac_label(&self) -> &'static str { "tomb-twofish-256-ctr-mac" }
@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn twofish_metadata() {
         let c = TwofishCtr;
-        assert_eq!(c.id(), 0x20);
+        assert_eq!(c.id(), CipherId::Twofish);
         assert_eq!(c.key_size(), 32);
         assert_eq!(c.nonce_size(), 16);
     }

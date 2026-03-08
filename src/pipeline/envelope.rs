@@ -1,3 +1,4 @@
+use crate::cipher::CipherId;
 use crate::key::LayerKey;
 use crate::{Error, Result};
 
@@ -6,7 +7,7 @@ use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
 pub struct LayerEnvelope {
-    pub layer_id: u8,
+    pub layer_id: CipherId,
     pub nonce: Vec<u8>,
     pub payload: Vec<u8>,
     pub mac: [u8; 32],
@@ -16,7 +17,7 @@ impl LayerEnvelope {
     /// Serialize: [layer_id:1][nonce_len:1][nonce:N][payload_len:8 LE][payload:M][mac:32]
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        out.push(self.layer_id);
+        out.push(self.layer_id as u8);
         out.push(self.nonce.len() as u8);
         out.extend_from_slice(&self.nonce);
         out.extend_from_slice(&(self.payload.len() as u64).to_le_bytes());
@@ -30,7 +31,7 @@ impl LayerEnvelope {
             return Err(Error::Format("envelope too short".into()));
         }
 
-        let layer_id = data[0];
+        let layer_id = CipherId::try_from(data[0])?;
         let nonce_len = data[1] as usize;
 
         let payload_len_start = 2usize.checked_add(nonce_len)
@@ -67,10 +68,10 @@ impl LayerEnvelope {
     }
 
     /// Compute HMAC-SHA256 over [layer_id || nonce || payload]
-    pub fn compute_mac(mac_key: &LayerKey, layer_id: u8, nonce: &[u8], payload: &[u8]) -> [u8; 32] {
+    pub fn compute_mac(mac_key: &LayerKey, layer_id: CipherId, nonce: &[u8], payload: &[u8]) -> [u8; 32] {
         let mut mac = Hmac::<Sha256>::new_from_slice(mac_key.as_bytes())
             .expect("HMAC key size is always valid");
-        mac.update(&[layer_id]);
+        mac.update(&[layer_id as u8]);
         mac.update(nonce);
         mac.update(payload);
         let result = mac.finalize().into_bytes();
@@ -96,10 +97,10 @@ mod tests {
         let mac_key = LayerKey([0xDD; 32]);
         let nonce = vec![1u8; 16];
         let payload = vec![2u8; 100];
-        let mac = LayerEnvelope::compute_mac(&mac_key, 0x20, &nonce, &payload);
+        let mac = LayerEnvelope::compute_mac(&mac_key, CipherId::Twofish, &nonce, &payload);
 
         let env = LayerEnvelope {
-            layer_id: 0x20,
+            layer_id: CipherId::Twofish,
             nonce: nonce.clone(),
             payload: payload.clone(),
             mac,
@@ -108,7 +109,7 @@ mod tests {
         let bytes = env.serialize();
         let parsed = LayerEnvelope::deserialize(&bytes).unwrap();
 
-        assert_eq!(parsed.layer_id, 0x20);
+        assert_eq!(parsed.layer_id, CipherId::Twofish);
         assert_eq!(parsed.nonce, nonce);
         assert_eq!(parsed.payload, payload);
         assert_eq!(parsed.mac, mac);
@@ -119,9 +120,9 @@ mod tests {
         let mac_key = LayerKey([0xEE; 32]);
         let nonce = vec![3u8; 24];
         let payload = vec![4u8; 50];
-        let mac = LayerEnvelope::compute_mac(&mac_key, 0x22, &nonce, &payload);
+        let mac = LayerEnvelope::compute_mac(&mac_key, CipherId::XChaCha, &nonce, &payload);
 
-        let env = LayerEnvelope { layer_id: 0x22, nonce, payload, mac };
+        let env = LayerEnvelope { layer_id: CipherId::XChaCha, nonce, payload, mac };
         assert!(env.verify_mac(&mac_key));
     }
 
@@ -130,12 +131,12 @@ mod tests {
         let mac_key = LayerKey([0xFF; 32]);
         let nonce = vec![5u8; 16];
         let payload = vec![6u8; 50];
-        let mac = LayerEnvelope::compute_mac(&mac_key, 0x21, &nonce, &payload);
+        let mac = LayerEnvelope::compute_mac(&mac_key, CipherId::Aes, &nonce, &payload);
 
         let mut tampered_payload = payload;
         tampered_payload[0] ^= 0xFF;
 
-        let env = LayerEnvelope { layer_id: 0x21, nonce, payload: tampered_payload, mac };
+        let env = LayerEnvelope { layer_id: CipherId::Aes, nonce, payload: tampered_payload, mac };
         assert!(!env.verify_mac(&mac_key));
     }
 
@@ -145,9 +146,9 @@ mod tests {
         let wrong_key = LayerKey([0xBB; 32]);
         let nonce = vec![7u8; 16];
         let payload = vec![8u8; 50];
-        let mac = LayerEnvelope::compute_mac(&mac_key, 0x20, &nonce, &payload);
+        let mac = LayerEnvelope::compute_mac(&mac_key, CipherId::Twofish, &nonce, &payload);
 
-        let env = LayerEnvelope { layer_id: 0x20, nonce, payload, mac };
+        let env = LayerEnvelope { layer_id: CipherId::Twofish, nonce, payload, mac };
         assert!(!env.verify_mac(&wrong_key));
     }
 }

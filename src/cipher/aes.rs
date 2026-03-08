@@ -1,4 +1,4 @@
-use crate::cipher::CipherLayer;
+use crate::cipher::{CipherLayer, CipherId};
 use crate::key::LayerKey;
 use crate::Result;
 
@@ -10,7 +10,7 @@ type Aes256CtrMode = ctr::Ctr128BE<Aes256>;
 pub struct AesCtr;
 
 impl CipherLayer for AesCtr {
-    fn id(&self) -> u8 { 0x21 }
+    fn id(&self) -> CipherId { CipherId::Aes }
     fn name(&self) -> &str { "aes-256-ctr" }
     fn encrypt_label(&self) -> &'static str { "tomb-aes-256-ctr" }
     fn mac_label(&self) -> &'static str { "tomb-aes-256-ctr-mac" }
@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn aes_metadata() {
         let c = AesCtr;
-        assert_eq!(c.id(), 0x21);
+        assert_eq!(c.id(), CipherId::Aes);
         assert_eq!(c.key_size(), 32);
         assert_eq!(c.nonce_size(), 16);
     }
