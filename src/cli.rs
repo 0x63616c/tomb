@@ -1,6 +1,6 @@
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 
@@ -32,15 +32,26 @@ pub enum Command {
         /// Skip post-seal verification (faster for large files)
         #[arg(long)]
         skip_verify: bool,
+        /// Read passphrase from file (for scripting, avoids interactive prompt)
+        #[arg(long)]
+        passphrase_file: Option<PathBuf>,
     },
     /// Decrypt a file
     Open {
         file: PathBuf,
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Read passphrase from file (for scripting, avoids interactive prompt)
+        #[arg(long)]
+        passphrase_file: Option<PathBuf>,
     },
     /// Confirm a file is decryptable
-    Verify { file: PathBuf },
+    Verify {
+        file: PathBuf,
+        /// Read passphrase from file (for scripting, avoids interactive prompt)
+        #[arg(long)]
+        passphrase_file: Option<PathBuf>,
+    },
     /// View public header (no passphrase needed)
     Inspect { file: PathBuf },
     /// Generate a 21-word passphrase
@@ -57,7 +68,19 @@ fn normalize_whitespace(input: &str) -> String {
     input.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn prompt_passphrase_for_seal() -> Result<Passphrase> {
+fn read_passphrase_file(path: &Path) -> Result<Passphrase> {
+    let contents = fs::read_to_string(path)?;
+    let pass = normalize_whitespace(contents.trim_end_matches('\n'));
+    Ok(Passphrase::new(pass.into_bytes()))
+}
+
+fn passphrase_for_seal(passphrase_file: Option<&Path>) -> Result<Passphrase> {
+    if let Some(path) = passphrase_file {
+        let passphrase = read_passphrase_file(path)?;
+        validate_passphrase(&String::from_utf8_lossy(passphrase.as_bytes()))?;
+        return Ok(passphrase);
+    }
+
     let p1 = prompt_passphrase("Enter passphrase (or press Enter to generate one): ")?;
     let p1 = normalize_whitespace(&p1);
 
@@ -94,17 +117,28 @@ fn prompt_passphrase_for_seal() -> Result<Passphrase> {
     }
 }
 
-fn prompt_passphrase_for_open() -> Result<Passphrase> {
+fn passphrase_for_open(passphrase_file: Option<&Path>) -> Result<Passphrase> {
+    if let Some(path) = passphrase_file {
+        return read_passphrase_file(path);
+    }
     let pass = prompt_passphrase("Enter passphrase: ")?;
     let pass = normalize_whitespace(&pass);
     Ok(Passphrase::new(pass.into_bytes()))
+}
+
+fn cli_config() -> SealConfig {
+    #[cfg(debug_assertions)]
+    if std::env::var("TOMB_TEST_PARAMS").is_ok() {
+        return SealConfig::test();
+    }
+    SealConfig::production()
 }
 
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Seal { file, output, note, skip_verify } => {
+        Command::Seal { file, output, note, skip_verify, passphrase_file } => {
             let output = output.unwrap_or_else(|| {
                 let mut p = file.clone();
                 p.set_extension("tomb");
@@ -131,8 +165,8 @@ pub fn run() -> Result<()> {
 
             let input_size = fs::metadata(&file)?.len();
 
-            let passphrase = prompt_passphrase_for_seal()?;
-            let config = SealConfig::production();
+            let passphrase = passphrase_for_seal(passphrase_file.as_deref())?;
+            let config = cli_config();
 
             println!("Preparing payload...");
             let mut prepared = crate::prepare_payload(&file, note.as_deref())?;
@@ -178,8 +212,8 @@ pub fn run() -> Result<()> {
             }
             println!("Remember to delete the original file.");
         }
-        Command::Open { file, output } => {
-            let passphrase = prompt_passphrase_for_open()?;
+        Command::Open { file, output, passphrase_file } => {
+            let passphrase = passphrase_for_open(passphrase_file.as_deref())?;
             let result = crate::open_file(&file, &passphrase)?;
             let output = output.unwrap_or_else(|| PathBuf::from(&result.filename));
             if output.exists() {
@@ -191,8 +225,8 @@ pub fn run() -> Result<()> {
             fs::write(&output, &result.data)?;
             println!("Opened -> {}", output.display());
         }
-        Command::Verify { file } => {
-            let passphrase = prompt_passphrase_for_open()?;
+        Command::Verify { file, passphrase_file } => {
+            let passphrase = passphrase_for_open(passphrase_file.as_deref())?;
             crate::open_file(&file, &passphrase)?;
             println!("Verified. File is decryptable.");
         }
