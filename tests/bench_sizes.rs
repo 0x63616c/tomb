@@ -34,7 +34,14 @@ fn bench_seal_by_file_size() {
         fs::write(&input, &data).unwrap();
 
         let start = Instant::now();
-        tomb::seal_with_params(&input, &output, &passphrase, None).unwrap();
+        tomb::seal(
+            &input,
+            &output,
+            &passphrase,
+            None,
+            &tomb::SealConfig::test(),
+        )
+        .unwrap();
         let elapsed = start.elapsed();
 
         println!("{:<10} {:>8.2?}", label, elapsed);

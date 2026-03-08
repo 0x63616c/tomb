@@ -1,11 +1,9 @@
 use std::path::PathBuf;
 use tomb::key::Passphrase;
-use tomb::key::derive::{ScryptDerive, Argon2idDerive};
 
 fn test_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "tomb_integration_{}_{}", name, std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("tomb_integration_{}_{}", name, std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -21,15 +19,17 @@ fn full_seal_open_cycle() {
 
     let passphrase = Passphrase::new(b"test passphrase for integration".to_vec());
 
-    tomb::seal_with_params(&input, &output, &passphrase, Some("integration test")).unwrap();
-    assert!(output.exists());
-
-    let opened = tomb::open_file_with_params(
+    tomb::seal(
+        &input,
         &output,
         &passphrase,
-        ScryptDerive::test(),
-        Argon2idDerive::test(),
-    ).unwrap();
+        Some("integration test"),
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
+    assert!(output.exists());
+
+    let opened = tomb::open_file(&output, &passphrase).unwrap();
 
     assert_eq!(opened.data, content);
     assert_eq!(opened.filename, "secret.json");
@@ -46,15 +46,17 @@ fn wrong_passphrase_fails() {
     std::fs::write(&input, b"secret data").unwrap();
 
     let passphrase = Passphrase::new(b"correct passphrase".to_vec());
-    tomb::seal_with_params(&input, &output, &passphrase, None).unwrap();
+    tomb::seal(
+        &input,
+        &output,
+        &passphrase,
+        None,
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
 
     let wrong = Passphrase::new(b"wrong passphrase".to_vec());
-    let result = tomb::open_file_with_params(
-        &output,
-        &wrong,
-        ScryptDerive::test(),
-        Argon2idDerive::test(),
-    );
+    let result = tomb::open_file(&output, &wrong);
     assert!(result.is_err());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -68,7 +70,14 @@ fn inspect_without_passphrase() {
 
     std::fs::write(&input, b"hello").unwrap();
     let passphrase = Passphrase::new(b"test".to_vec());
-    tomb::seal_with_params(&input, &output, &passphrase, None).unwrap();
+    tomb::seal(
+        &input,
+        &output,
+        &passphrase,
+        None,
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
 
     let header = tomb::inspect_file(&output).unwrap();
     assert_eq!(header.version_major, 1);
@@ -86,19 +95,21 @@ fn tampered_file_fails() {
 
     std::fs::write(&input, b"important data").unwrap();
     let passphrase = Passphrase::new(b"test passphrase".to_vec());
-    tomb::seal_with_params(&input, &output, &passphrase, None).unwrap();
+    tomb::seal(
+        &input,
+        &output,
+        &passphrase,
+        None,
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
 
     let mut data = std::fs::read(&output).unwrap();
     let mid = data.len() / 2;
     data[mid] ^= 0xFF;
     std::fs::write(&output, &data).unwrap();
 
-    let result = tomb::open_file_with_params(
-        &output,
-        &passphrase,
-        ScryptDerive::test(),
-        Argon2idDerive::test(),
-    );
+    let result = tomb::open_file(&output, &passphrase);
     assert!(result.is_err());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -114,14 +125,16 @@ fn large_file_round_trip() {
     std::fs::write(&input, &content).unwrap();
 
     let passphrase = Passphrase::new(b"large file test".to_vec());
-    tomb::seal_with_params(&input, &output, &passphrase, None).unwrap();
-
-    let opened = tomb::open_file_with_params(
+    tomb::seal(
+        &input,
         &output,
         &passphrase,
-        ScryptDerive::test(),
-        Argon2idDerive::test(),
-    ).unwrap();
+        None,
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
+
+    let opened = tomb::open_file(&output, &passphrase).unwrap();
 
     assert_eq!(opened.data, content);
 
@@ -137,14 +150,16 @@ fn empty_file_round_trip() {
     std::fs::write(&input, b"").unwrap();
 
     let passphrase = Passphrase::new(b"empty file test".to_vec());
-    tomb::seal_with_params(&input, &output, &passphrase, None).unwrap();
-
-    let opened = tomb::open_file_with_params(
+    tomb::seal(
+        &input,
         &output,
         &passphrase,
-        ScryptDerive::test(),
-        Argon2idDerive::test(),
-    ).unwrap();
+        None,
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
+
+    let opened = tomb::open_file(&output, &passphrase).unwrap();
 
     assert!(opened.data.is_empty());
     assert_eq!(opened.filename, "empty.bin");
@@ -162,15 +177,16 @@ fn note_preserved() {
 
     let passphrase = Passphrase::new(b"note test passphrase".to_vec());
     let note_text = "this is my important note about the backup";
-    tomb::seal_with_params(&input, &output, &passphrase, Some(note_text)).unwrap();
-
-    // Verify round-trip works (note is embedded in the encrypted inner header)
-    let opened = tomb::open_file_with_params(
+    tomb::seal(
+        &input,
         &output,
         &passphrase,
-        ScryptDerive::test(),
-        Argon2idDerive::test(),
-    ).unwrap();
+        Some(note_text),
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
+
+    let opened = tomb::open_file(&output, &passphrase).unwrap();
 
     assert_eq!(opened.data, b"data with a note");
     assert_eq!(opened.filename, "noted.txt");
