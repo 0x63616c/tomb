@@ -56,6 +56,8 @@ pub enum Command {
     Inspect { file: PathBuf },
     /// Generate a 21-word passphrase
     Generate,
+    /// Launch terminal UI
+    Ui,
 }
 
 fn prompt_passphrase(prompt: &str) -> Result<String> {
@@ -138,7 +140,13 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Seal { file, output, note, skip_verify, passphrase_file } => {
+        Command::Seal {
+            file,
+            output,
+            note,
+            skip_verify,
+            passphrase_file,
+        } => {
             let output = output.unwrap_or_else(|| {
                 let mut p = file.clone();
                 p.set_extension("tomb");
@@ -208,11 +216,18 @@ pub fn run() -> Result<()> {
                 overhead
             );
             if skip_verify {
-                println!("Run 'tomb verify {}' to confirm the file is decryptable.", output.display());
+                println!(
+                    "Run 'tomb verify {}' to confirm the file is decryptable.",
+                    output.display()
+                );
             }
             println!("Remember to delete the original file.");
         }
-        Command::Open { file, output, passphrase_file } => {
+        Command::Open {
+            file,
+            output,
+            passphrase_file,
+        } => {
             let passphrase = passphrase_for_open(passphrase_file.as_deref())?;
             let result = crate::open_file(&file, &passphrase)?;
             let output = output.unwrap_or_else(|| PathBuf::from(&result.filename));
@@ -225,7 +240,10 @@ pub fn run() -> Result<()> {
             fs::write(&output, &result.data)?;
             println!("Opened -> {}", output.display());
         }
-        Command::Verify { file, passphrase_file } => {
+        Command::Verify {
+            file,
+            passphrase_file,
+        } => {
             let passphrase = passphrase_for_open(passphrase_file.as_deref())?;
             crate::open_file(&file, &passphrase)?;
             println!("Verified. File is decryptable.");
@@ -269,6 +287,18 @@ pub fn run() -> Result<()> {
             let mut buf = String::new();
             io::stdin().read_line(&mut buf).ok();
             print!("\x1b[?1049l");
+        }
+        Command::Ui => {
+            let status = std::process::Command::new("tombui").status();
+            match status {
+                Ok(s) => std::process::exit(s.code().unwrap_or(1)),
+                Err(_) => {
+                    eprintln!(
+                        "tombui is not installed. Install it with: cargo install --path tombui/"
+                    );
+                    std::process::exit(1);
+                }
+            }
         }
     }
 
