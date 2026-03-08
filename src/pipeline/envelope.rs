@@ -16,6 +16,10 @@ pub struct LayerEnvelope {
 impl LayerEnvelope {
     /// Serialize: [layer_id:1][nonce_len:1][nonce:N][payload_len:8 LE][payload:M][mac:32]
     pub fn serialize(&self) -> Vec<u8> {
+        debug_assert!(
+            self.nonce.len() <= 255,
+            "nonce length must fit in u8"
+        );
         let mut out = Vec::new();
         out.push(self.layer_id as u8);
         out.push(self.nonce.len() as u8);

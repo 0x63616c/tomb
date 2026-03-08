@@ -21,6 +21,8 @@ pub fn expand_layer_keys(master: &MasterKey, layers: &[LayerInfo]) -> Result<Vec
     let mut states = Vec::new();
 
     for layer in layers {
+        debug_assert!(layer.nonce_size > 0, "nonce size must be positive");
+
         let mut encrypt_key = [0u8; 32];
         hk.expand(layer.encrypt_label.as_bytes(), &mut encrypt_key)
             .map_err(|_| Error::KeyExpansion)?;

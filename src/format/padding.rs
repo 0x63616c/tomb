@@ -11,6 +11,7 @@ pub fn padme_length(len: usize) -> usize {
     }
     let e = ilog2(len);
     let s = ilog2(e as usize) + 1;
+    debug_assert!(e >= s, "PADME: exponent {e} must be >= shift {s}");
     let last_bits = e - s;
     let bit_mask = (1usize << last_bits) - 1;
     (len + bit_mask) & !bit_mask

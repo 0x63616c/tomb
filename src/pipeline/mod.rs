@@ -48,6 +48,13 @@ impl Pipeline {
     }
 
     pub fn seal(&self, states: &[LayerState], plaintext: &[u8]) -> Result<Vec<u8>> {
+        assert_eq!(
+            self.layers.len(),
+            states.len(),
+            "layer count ({}) must match state count ({})",
+            self.layers.len(),
+            states.len()
+        );
         let mut data = plaintext.to_vec();
 
         for (layer, state) in self.layers.iter().zip(states.iter()) {
@@ -68,6 +75,13 @@ impl Pipeline {
     }
 
     pub fn open(&self, states: &[LayerState], sealed: &[u8]) -> Result<Vec<u8>> {
+        assert_eq!(
+            self.layers.len(),
+            states.len(),
+            "layer count ({}) must match state count ({})",
+            self.layers.len(),
+            states.len()
+        );
         let mut data = sealed.to_vec();
 
         for (layer, state) in self.layers.iter().zip(states.iter()).rev() {

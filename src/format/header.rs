@@ -43,6 +43,8 @@ impl PublicHeader {
             out.push(layer.nonce_size);
         }
 
+        debug_assert_eq!(self.salt.len(), 32, "salt must be 32 bytes");
+        debug_assert_eq!(self.commitment.len(), 32, "commitment must be 32 bytes");
         out.extend_from_slice(&self.salt);
         out.extend_from_slice(&self.commitment);
 

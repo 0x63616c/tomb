@@ -251,6 +251,7 @@ pub fn chain_derive(kdfs: &[Box<dyn Derive>], passphrase: &[u8], salt: &[u8]) ->
         input = result.as_bytes().to_vec();
     }
 
+    assert_eq!(input.len(), 32, "KDF chain must produce 32-byte key");
     let mut key = [0u8; 32];
     key.copy_from_slice(&input);
     input.zeroize();

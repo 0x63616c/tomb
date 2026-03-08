@@ -30,6 +30,7 @@ impl CipherLayer for AesCtr {
     }
 
     fn encrypt(&self, key: &LayerKey, nonce: &[u8], data: &[u8]) -> Result<Vec<u8>> {
+        assert_eq!(nonce.len(), 16, "AES-256 CTR nonce must be 16 bytes");
         let mut buffer = data.to_vec();
         let mut cipher = Aes256CtrMode::new(key.as_bytes().into(), nonce.into());
         cipher.apply_keystream(&mut buffer);

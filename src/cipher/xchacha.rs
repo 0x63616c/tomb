@@ -28,6 +28,7 @@ impl CipherLayer for XChaCha {
     }
 
     fn encrypt(&self, key: &LayerKey, nonce: &[u8], data: &[u8]) -> Result<Vec<u8>> {
+        assert_eq!(nonce.len(), 24, "XChaCha20 nonce must be 24 bytes");
         let mut buffer = data.to_vec();
         let mut cipher = XChaCha20Cipher::new(key.as_bytes().into(), nonce.into());
         cipher.apply_keystream(&mut buffer);
