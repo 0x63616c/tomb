@@ -4,7 +4,9 @@ use std::fs;
 
 use clap::{Parser, Subcommand};
 
-use crate::{Error, Result};
+use zeroize::Zeroize;
+
+use crate::{Error, Result, SealConfig};
 use crate::key::Passphrase;
 use crate::passphrase::{validate_passphrase, generate::generate_passphrase};
 
@@ -126,8 +128,29 @@ pub fn run() -> Result<()> {
             let input_size = fs::metadata(&file)?.len();
 
             let passphrase = prompt_passphrase_for_seal()?;
+            let config = SealConfig::production();
+
+            println!("Preparing payload...");
+            let mut prepared = crate::prepare_payload(&file, note.as_deref())?;
+
             println!("Deriving keys (this takes a few seconds)...");
-            crate::seal(&file, &output, &passphrase, note.as_deref(), &crate::SealConfig::production())?;
+            let pipeline = crate::pipeline::Pipeline::from_cipher_ids(&config.cipher_ids)?;
+            let keys = crate::derive_keys(&passphrase, &pipeline, &config.kdf_chain)?;
+
+            println!("Encrypting...");
+            let header = crate::format::PublicHeader {
+                version_major: crate::format::FORMAT_VERSION_MAJOR,
+                version_minor: crate::format::FORMAT_VERSION_MINOR,
+                kdf_chain: config.kdf_chain.clone(),
+                layers: pipeline.layer_descriptors(),
+                salt: keys.salt.clone(),
+                commitment: keys.commitment.as_bytes().to_vec(),
+            };
+            crate::encrypt_and_write(&output, &header, &pipeline, &keys.states, &prepared.padded)?;
+            prepared.padded.zeroize();
+
+            println!("Verifying...");
+            crate::verify_sealed(&output, &passphrase, &prepared.checksum)?;
 
             let output_size = fs::metadata(&output)?.len();
             let overhead = output_size as i64 - input_size as i64;
