@@ -322,6 +322,7 @@ pub fn seal(
         &keys.states,
         &prepared.padded,
     )?;
+    verify_sealed(output_path, passphrase, &prepared.checksum)?;
     prepared.padded.zeroize();
 
     Ok(())

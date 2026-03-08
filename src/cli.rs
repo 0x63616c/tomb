@@ -138,7 +138,7 @@ pub fn run() -> Result<()> {
             let pipeline = crate::pipeline::Pipeline::from_cipher_ids(&config.cipher_ids)?;
             let keys = crate::derive_keys(&passphrase, &pipeline, &config.kdf_chain)?;
 
-            println!("Encrypting...");
+            println!("Encrypting ({} cipher layers)...", config.cipher_ids.len());
             let header = crate::format::PublicHeader {
                 version_major: crate::format::FORMAT_VERSION_MAJOR,
                 version_minor: crate::format::FORMAT_VERSION_MINOR,
@@ -149,6 +149,9 @@ pub fn run() -> Result<()> {
             };
             crate::encrypt_and_write(&output, &header, &pipeline, &keys.states, &prepared.padded)?;
             prepared.padded.zeroize();
+
+            println!("Verifying...");
+            crate::verify_sealed(&output, &passphrase, &prepared.checksum)?;
 
             let output_size = fs::metadata(&output)?.len();
             let overhead = output_size as i64 - input_size as i64;
