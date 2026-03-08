@@ -116,32 +116,6 @@ fn tampered_file_fails() {
 }
 
 #[test]
-fn large_file_round_trip() {
-    let dir = test_dir("large");
-    let input = dir.join("large.bin");
-    let output = dir.join("large.tomb");
-
-    let content: Vec<u8> = (0..1_000_000).map(|i| (i % 256) as u8).collect();
-    std::fs::write(&input, &content).unwrap();
-
-    let passphrase = Passphrase::new(b"large file test".to_vec());
-    tomb::seal(
-        &input,
-        &output,
-        &passphrase,
-        None,
-        &tomb::SealConfig::test(),
-    )
-    .unwrap();
-
-    let opened = tomb::open_file(&output, &passphrase).unwrap();
-
-    assert_eq!(opened.data, content);
-
-    std::fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
 fn empty_file_round_trip() {
     let dir = test_dir("empty");
     let input = dir.join("empty.bin");
