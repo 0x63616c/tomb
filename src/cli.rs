@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io;
 use std::path::PathBuf;
 use std::fs;
 
@@ -49,54 +49,51 @@ fn prompt_passphrase(prompt: &str) -> Result<String> {
     Ok(pass)
 }
 
+/// Normalize whitespace: trim leading/trailing, collapse multiple spaces to single space.
+fn normalize_whitespace(input: &str) -> String {
+    input.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn prompt_passphrase_for_seal() -> Result<Passphrase> {
-    println!("  1. Generate a secure passphrase (21 words)");
-    println!("  2. Enter your own passphrase");
-    print!("Choice [1]: ");
-    io::stdout().flush().ok();
+    let p1 = prompt_passphrase("Enter passphrase (or press Enter to generate one): ")?;
+    let p1 = normalize_whitespace(&p1);
 
-    let mut choice = String::new();
-    io::stdin().read_line(&mut choice)
-        .map_err(Error::Io)?;
+    if p1.is_empty() {
+        let words = generate_passphrase(21);
 
-    match choice.trim() {
-        "1" | "" => {
-            let words = generate_passphrase(21);
-
-            // Alternate screen buffer
-            print!("\x1b[?1049h");
-            println!("\nYour passphrase (21 words):\n");
-            for chunk in words.chunks(7) {
-                println!("  {}", chunk.join(" "));
-            }
-            println!("\nWrite this down somewhere safe. Press Enter when done...");
-            let mut buf = String::new();
-            io::stdin().read_line(&mut buf).ok();
-            print!("\x1b[?1049l");
-
-            println!("Re-enter your passphrase to confirm:");
-            let entered = prompt_passphrase("Passphrase: ")?;
-            let generated = words.join(" ");
-            if entered != generated {
-                return Err(Error::PassphraseMismatch);
-            }
-            Ok(Passphrase::new(generated.into_bytes()))
+        // Alternate screen buffer
+        print!("\x1b[?1049h");
+        println!("\nYour passphrase (21 words):\n");
+        for chunk in words.chunks(7) {
+            println!("  {}", chunk.join(" "));
         }
-        "2" => {
-            let p1 = prompt_passphrase("Enter passphrase (21 words from the EFF diceware list): ")?;
-            validate_passphrase(&p1)?;
-            let p2 = prompt_passphrase("Confirm passphrase: ")?;
-            if p1 != p2 {
-                return Err(Error::PassphraseMismatch);
-            }
-            Ok(Passphrase::new(p1.into_bytes()))
+        println!("\nWrite this down somewhere safe. Press Enter when done...");
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf).ok();
+        print!("\x1b[?1049l");
+
+        println!("Re-enter your passphrase to confirm:");
+        let entered = prompt_passphrase("Passphrase: ")?;
+        let entered = normalize_whitespace(&entered);
+        let generated = words.join(" ");
+        if entered != generated {
+            return Err(Error::PassphraseMismatch);
         }
-        _ => Err(Error::Format("invalid choice".into())),
+        Ok(Passphrase::new(generated.into_bytes()))
+    } else {
+        validate_passphrase(&p1)?;
+        let p2 = prompt_passphrase("Confirm passphrase: ")?;
+        let p2 = normalize_whitespace(&p2);
+        if p1 != p2 {
+            return Err(Error::PassphraseMismatch);
+        }
+        Ok(Passphrase::new(p1.into_bytes()))
     }
 }
 
 fn prompt_passphrase_for_open() -> Result<Passphrase> {
     let pass = prompt_passphrase("Enter passphrase: ")?;
+    let pass = normalize_whitespace(&pass);
     Ok(Passphrase::new(pass.into_bytes()))
 }
 
