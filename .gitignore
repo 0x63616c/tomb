@@ -1,4 +1,5 @@
 /target
 /.worktree
+/.worktrees
 /.cargo
 *.tomb
