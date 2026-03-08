@@ -14,7 +14,17 @@ use crate::{Error, Result, SealConfig};
 #[command(
     name = "tomb",
     version,
-    about = "Encrypt anything with a passphrase. Recover it decades later."
+    about = "Encrypt anything with a passphrase. Recover it decades later.",
+    arg_required_else_help = true,
+    after_help = "Examples:
+  tomb generate                          Generate a 21-word passphrase
+  tomb seal secrets.json                 Encrypt with default output (secrets.tomb)
+  tomb seal secrets.json -o backup.tomb  Encrypt with custom output name
+  tomb seal data.tar --note \"march 2026\" Encrypt with a note
+  tomb open backup.tomb                  Decrypt to original filename
+  tomb open backup.tomb -o restored.json Decrypt to custom path
+  tomb verify backup.tomb                Confirm file is decryptable
+  tomb inspect backup.tomb               View header without passphrase"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -23,40 +33,40 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Encrypt a file
+    /// Encrypt a file with three layers of authenticated encryption
     Seal {
         /// Path to the file to encrypt
         file: PathBuf,
         /// Output path [default: <FILE>.tomb]
-        #[arg(short, long)]
+        #[arg(short, long, value_name = "PATH")]
         output: Option<PathBuf>,
-        /// Attach a plaintext note (stored encrypted inside the file)
-        #[arg(long)]
+        /// Attach a note (stored encrypted inside the file)
+        #[arg(long, value_name = "TEXT")]
         note: Option<String>,
         /// Skip post-seal verification
         #[arg(long)]
         skip_verify: bool,
         /// Read passphrase from a file instead of prompting
-        #[arg(long)]
+        #[arg(long, value_name = "PATH")]
         passphrase_file: Option<PathBuf>,
     },
-    /// Decrypt a file
+    /// Decrypt a .tomb file back to the original
     Open {
         /// Path to the .tomb file
         file: PathBuf,
         /// Output path [default: original filename from header]
-        #[arg(short, long)]
+        #[arg(short, long, value_name = "PATH")]
         output: Option<PathBuf>,
         /// Read passphrase from a file instead of prompting
-        #[arg(long)]
+        #[arg(long, value_name = "PATH")]
         passphrase_file: Option<PathBuf>,
     },
-    /// Verify a file can be decrypted without writing output
+    /// Verify a .tomb file is decryptable without extracting
     Verify {
         /// Path to the .tomb file
         file: PathBuf,
         /// Read passphrase from a file instead of prompting
-        #[arg(long)]
+        #[arg(long, value_name = "PATH")]
         passphrase_file: Option<PathBuf>,
     },
     /// Show public header details (no passphrase needed)
@@ -64,7 +74,7 @@ pub enum Command {
         /// Path to the .tomb file
         file: PathBuf,
     },
-    /// Generate a random 21-word passphrase
+    /// Generate a random 21-word diceware passphrase
     Generate,
 }
 
