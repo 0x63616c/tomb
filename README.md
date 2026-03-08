@@ -29,9 +29,17 @@ tomb verify <file.tomb>          # Confirm a file is decryptable
 tomb inspect <file.tomb>         # View public header (no passphrase needed)
 ```
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0x63616c/tomb/main/scripts/install.sh | bash
+```
+
+Installs to `~/.tomb/bin` and adds it to your PATH. macOS and Linux only (x86_64 and ARM). Run again to update.
+
 ## Build from source
 
-```
+```bash
 git clone https://github.com/0x63616c/tomb.git
 cd tomb
 cargo build --release

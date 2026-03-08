@@ -125,7 +125,7 @@ jobs:
             ## Install
 
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/0x63616c/tomb/main/install.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/0x63616c/tomb/main/scripts/install.sh | bash
             ```
 
             Or download a specific platform binary from the assets below and extract manually.
@@ -139,4 +139,4 @@ jobs:
           files: |
             artifacts/tomb-*.tar.gz
             SHA256SUMS
-            install.sh
+            scripts/install.sh
