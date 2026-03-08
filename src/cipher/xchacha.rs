@@ -1,19 +1,31 @@
-use crate::cipher::{CipherLayer, CipherId};
+use crate::cipher::{CipherId, CipherLayer};
 use crate::key::LayerKey;
 use crate::Result;
 
-use chacha20::XChaCha20 as XChaCha20Cipher;
 use chacha20::cipher::{KeyIvInit, StreamCipher};
+use chacha20::XChaCha20 as XChaCha20Cipher;
 
 pub struct XChaCha;
 
 impl CipherLayer for XChaCha {
-    fn id(&self) -> CipherId { CipherId::XChaCha }
-    fn name(&self) -> &str { "xchacha20" }
-    fn encrypt_label(&self) -> &'static str { "tomb-xchacha20" }
-    fn mac_label(&self) -> &'static str { "tomb-xchacha20-mac" }
-    fn key_size(&self) -> usize { 32 }
-    fn nonce_size(&self) -> usize { 24 }
+    fn id(&self) -> CipherId {
+        CipherId::XChaCha
+    }
+    fn name(&self) -> &str {
+        "xchacha20"
+    }
+    fn encrypt_label(&self) -> &'static str {
+        "tomb-xchacha20"
+    }
+    fn mac_label(&self) -> &'static str {
+        "tomb-xchacha20-mac"
+    }
+    fn key_size(&self) -> usize {
+        32
+    }
+    fn nonce_size(&self) -> usize {
+        24
+    }
 
     fn encrypt(&self, key: &LayerKey, nonce: &[u8], data: &[u8]) -> Result<Vec<u8>> {
         let mut buffer = data.to_vec();

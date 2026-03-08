@@ -8,7 +8,7 @@ use zeroize::Zeroize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum KdfId {
-    Scrypt   = 0x01,
+    Scrypt = 0x01,
     Argon2id = 0x02,
 }
 
@@ -34,8 +34,16 @@ impl TryFrom<u8> for KdfId {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KdfParams {
-    Scrypt { log_n: u8, r: u32, p: u32 },
-    Argon2id { memory_kib: u32, iterations: u32, parallelism: u32 },
+    Scrypt {
+        log_n: u8,
+        r: u32,
+        p: u32,
+    },
+    Argon2id {
+        memory_kib: u32,
+        iterations: u32,
+        parallelism: u32,
+    },
 }
 
 impl KdfParams {
@@ -48,16 +56,20 @@ impl KdfParams {
 
     pub fn to_derive(&self) -> Box<dyn Derive> {
         match self {
-            KdfParams::Scrypt { log_n, r, p } => {
-                Box::new(ScryptDerive { log_n: *log_n, r: *r, p: *p })
-            }
-            KdfParams::Argon2id { memory_kib, iterations, parallelism } => {
-                Box::new(Argon2idDerive {
-                    memory_kib: *memory_kib,
-                    iterations: *iterations,
-                    parallelism: *parallelism,
-                })
-            }
+            KdfParams::Scrypt { log_n, r, p } => Box::new(ScryptDerive {
+                log_n: *log_n,
+                r: *r,
+                p: *p,
+            }),
+            KdfParams::Argon2id {
+                memory_kib,
+                iterations,
+                parallelism,
+            } => Box::new(Argon2idDerive {
+                memory_kib: *memory_kib,
+                iterations: *iterations,
+                parallelism: *parallelism,
+            }),
         }
     }
 
@@ -70,7 +82,11 @@ impl KdfParams {
                 out.extend_from_slice(&r.to_le_bytes());
                 out.extend_from_slice(&p.to_le_bytes());
             }
-            KdfParams::Argon2id { memory_kib, iterations, parallelism } => {
+            KdfParams::Argon2id {
+                memory_kib,
+                iterations,
+                parallelism,
+            } => {
                 out.push(KdfId::Argon2id as u8);
                 out.extend_from_slice(&memory_kib.to_le_bytes());
                 out.extend_from_slice(&iterations.to_le_bytes());
@@ -102,7 +118,14 @@ impl KdfParams {
                 let memory_kib = u32::from_le_bytes(data[1..5].try_into().unwrap());
                 let iterations = u32::from_le_bytes(data[5..9].try_into().unwrap());
                 let parallelism = u32::from_le_bytes(data[9..13].try_into().unwrap());
-                Ok((KdfParams::Argon2id { memory_kib, iterations, parallelism }, 13))
+                Ok((
+                    KdfParams::Argon2id {
+                        memory_kib,
+                        iterations,
+                        parallelism,
+                    },
+                    13,
+                ))
             }
         }
     }
@@ -135,16 +158,26 @@ pub struct ScryptDerive {
 
 impl ScryptDerive {
     pub fn production() -> Self {
-        Self { log_n: 20, r: 8, p: 1 }
+        Self {
+            log_n: 20,
+            r: 8,
+            p: 1,
+        }
     }
 
     pub fn test() -> Self {
-        Self { log_n: 10, r: 8, p: 1 }
+        Self {
+            log_n: 10,
+            r: 8,
+            p: 1,
+        }
     }
 }
 
 impl Derive for ScryptDerive {
-    fn id(&self) -> KdfId { KdfId::Scrypt }
+    fn id(&self) -> KdfId {
+        KdfId::Scrypt
+    }
 
     fn derive(&self, input: &[u8], salt: &[u8]) -> Result<MasterKey> {
         let params = scrypt::Params::new(self.log_n, self.r, self.p, 32)
@@ -166,23 +199,36 @@ pub struct Argon2idDerive {
 
 impl Argon2idDerive {
     pub fn production() -> Self {
-        Self { memory_kib: 1_048_576, iterations: 4, parallelism: 4 }
+        Self {
+            memory_kib: 1_048_576,
+            iterations: 4,
+            parallelism: 4,
+        }
     }
 
     pub fn test() -> Self {
-        Self { memory_kib: 1024, iterations: 1, parallelism: 1 }
+        Self {
+            memory_kib: 1024,
+            iterations: 1,
+            parallelism: 1,
+        }
     }
 }
 
 impl Derive for Argon2idDerive {
-    fn id(&self) -> KdfId { KdfId::Argon2id }
+    fn id(&self) -> KdfId {
+        KdfId::Argon2id
+    }
 
     fn derive(&self, input: &[u8], salt: &[u8]) -> Result<MasterKey> {
-        let params = argon2::Params::new(self.memory_kib, self.iterations, self.parallelism, Some(32))
-            .map_err(|e| Error::Encryption(format!("argon2 params: {e}")))?;
-        let argon2 = argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+        let params =
+            argon2::Params::new(self.memory_kib, self.iterations, self.parallelism, Some(32))
+                .map_err(|e| Error::Encryption(format!("argon2 params: {e}")))?;
+        let argon2 =
+            argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
         let mut output = [0u8; 32];
-        argon2.hash_password_into(input, salt, &mut output)
+        argon2
+            .hash_password_into(input, salt, &mut output)
             .map_err(|e| Error::Encryption(format!("argon2: {e}")))?;
         Ok(MasterKey(output))
     }
@@ -190,11 +236,7 @@ impl Derive for Argon2idDerive {
 
 // ── Chained KDF ─────────────────────────────────────────────────────────
 
-pub fn chain_derive(
-    kdfs: &[Box<dyn Derive>],
-    passphrase: &[u8],
-    salt: &[u8],
-) -> Result<MasterKey> {
+pub fn chain_derive(kdfs: &[Box<dyn Derive>], passphrase: &[u8], salt: &[u8]) -> Result<MasterKey> {
     let prk = Hkdf::<Sha256>::new(None, salt);
     let mut input = passphrase.to_vec();
 
@@ -215,16 +257,6 @@ pub fn chain_derive(
     Ok(MasterKey(key))
 }
 
-// ── KDF Lookup ──────────────────────────────────────────────────────────
-
-pub fn kdf_by_id(id: u8) -> Result<Box<dyn Derive>> {
-    let kdf_id = KdfId::try_from(id)?;
-    match kdf_id {
-        KdfId::Scrypt => Ok(Box::new(ScryptDerive::production())),
-        KdfId::Argon2id => Ok(Box::new(Argon2idDerive::production())),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,16 +264,24 @@ mod tests {
     #[test]
     fn scrypt_derive_deterministic() {
         let kdf = ScryptDerive::test();
-        let key1 = kdf.derive(b"passphrase", b"salt1234567890123456789012345678").unwrap();
-        let key2 = kdf.derive(b"passphrase", b"salt1234567890123456789012345678").unwrap();
+        let key1 = kdf
+            .derive(b"passphrase", b"salt1234567890123456789012345678")
+            .unwrap();
+        let key2 = kdf
+            .derive(b"passphrase", b"salt1234567890123456789012345678")
+            .unwrap();
         assert_eq!(key1.as_bytes(), key2.as_bytes());
     }
 
     #[test]
     fn scrypt_derive_different_input_different_output() {
         let kdf = ScryptDerive::test();
-        let key1 = kdf.derive(b"passphrase1", b"salt1234567890123456789012345678").unwrap();
-        let key2 = kdf.derive(b"passphrase2", b"salt1234567890123456789012345678").unwrap();
+        let key1 = kdf
+            .derive(b"passphrase1", b"salt1234567890123456789012345678")
+            .unwrap();
+        let key2 = kdf
+            .derive(b"passphrase2", b"salt1234567890123456789012345678")
+            .unwrap();
         assert_ne!(key1.as_bytes(), key2.as_bytes());
     }
 
@@ -254,8 +294,12 @@ mod tests {
     #[test]
     fn argon2id_derive_deterministic() {
         let kdf = Argon2idDerive::test();
-        let key1 = kdf.derive(b"passphrase", b"salt5678901234567890123456789012").unwrap();
-        let key2 = kdf.derive(b"passphrase", b"salt5678901234567890123456789012").unwrap();
+        let key1 = kdf
+            .derive(b"passphrase", b"salt5678901234567890123456789012")
+            .unwrap();
+        let key2 = kdf
+            .derive(b"passphrase", b"salt5678901234567890123456789012")
+            .unwrap();
         assert_eq!(key1.as_bytes(), key2.as_bytes());
     }
 
@@ -328,27 +372,32 @@ mod tests {
     }
 
     #[test]
-    fn kdf_lookup() {
-        assert_eq!(kdf_by_id(KdfId::Scrypt as u8).unwrap().id(), KdfId::Scrypt);
-        assert_eq!(kdf_by_id(KdfId::Argon2id as u8).unwrap().id(), KdfId::Argon2id);
-        assert!(kdf_by_id(0xFF).is_err());
-    }
-
-    #[test]
     fn kdf_params_scrypt_id() {
-        let params = KdfParams::Scrypt { log_n: 20, r: 8, p: 1 };
+        let params = KdfParams::Scrypt {
+            log_n: 20,
+            r: 8,
+            p: 1,
+        };
         assert_eq!(params.id(), KdfId::Scrypt);
     }
 
     #[test]
     fn kdf_params_argon2id_id() {
-        let params = KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 };
+        let params = KdfParams::Argon2id {
+            memory_kib: 1_048_576,
+            iterations: 4,
+            parallelism: 4,
+        };
         assert_eq!(params.id(), KdfId::Argon2id);
     }
 
     #[test]
     fn kdf_params_scrypt_serialize_round_trip() {
-        let params = KdfParams::Scrypt { log_n: 20, r: 8, p: 1 };
+        let params = KdfParams::Scrypt {
+            log_n: 20,
+            r: 8,
+            p: 1,
+        };
         let bytes = params.serialize();
         assert_eq!(bytes[0], KdfId::Scrypt as u8);
         let (parsed, consumed) = KdfParams::deserialize(&bytes).unwrap();
@@ -358,7 +407,11 @@ mod tests {
 
     #[test]
     fn kdf_params_argon2id_serialize_round_trip() {
-        let params = KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 };
+        let params = KdfParams::Argon2id {
+            memory_kib: 1_048_576,
+            iterations: 4,
+            parallelism: 4,
+        };
         let bytes = params.serialize();
         assert_eq!(bytes[0], KdfId::Argon2id as u8);
         let (parsed, consumed) = KdfParams::deserialize(&bytes).unwrap();
@@ -368,7 +421,11 @@ mod tests {
 
     #[test]
     fn kdf_params_to_derive_scrypt() {
-        let params = KdfParams::Scrypt { log_n: 10, r: 8, p: 1 };
+        let params = KdfParams::Scrypt {
+            log_n: 10,
+            r: 8,
+            p: 1,
+        };
         let d = params.to_derive();
         assert_eq!(d.id(), KdfId::Scrypt);
         let result = d.derive(b"test", b"salt1234567890123456789012345678");
@@ -377,7 +434,11 @@ mod tests {
 
     #[test]
     fn kdf_params_to_derive_argon2id() {
-        let params = KdfParams::Argon2id { memory_kib: 1024, iterations: 1, parallelism: 1 };
+        let params = KdfParams::Argon2id {
+            memory_kib: 1024,
+            iterations: 1,
+            parallelism: 1,
+        };
         let d = params.to_derive();
         assert_eq!(d.id(), KdfId::Argon2id);
         let result = d.derive(b"test", b"salt5678901234567890123456789012");
@@ -386,13 +447,21 @@ mod tests {
 
     #[test]
     fn kdf_params_memory_display_scrypt() {
-        let params = KdfParams::Scrypt { log_n: 20, r: 8, p: 1 };
+        let params = KdfParams::Scrypt {
+            log_n: 20,
+            r: 8,
+            p: 1,
+        };
         assert_eq!(params.memory_display(), "1024MB");
     }
 
     #[test]
     fn kdf_params_memory_display_argon2id() {
-        let params = KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 };
+        let params = KdfParams::Argon2id {
+            memory_kib: 1_048_576,
+            iterations: 4,
+            parallelism: 4,
+        };
         assert_eq!(params.memory_display(), "1024MB");
     }
 }

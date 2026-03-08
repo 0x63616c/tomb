@@ -34,9 +34,11 @@ impl LayerEnvelope {
         let layer_id = CipherId::try_from(data[0])?;
         let nonce_len = data[1] as usize;
 
-        let payload_len_start = 2usize.checked_add(nonce_len)
+        let payload_len_start = 2usize
+            .checked_add(nonce_len)
             .ok_or_else(|| Error::Format("nonce length overflow".into()))?;
-        let payload_len_end = payload_len_start.checked_add(8)
+        let payload_len_end = payload_len_start
+            .checked_add(8)
             .ok_or_else(|| Error::Format("payload length overflow".into()))?;
 
         if data.len() < payload_len_end {
@@ -44,16 +46,18 @@ impl LayerEnvelope {
         }
 
         let nonce = data[2..payload_len_start].to_vec();
-        let payload_len_u64 = u64::from_le_bytes(
-            data[payload_len_start..payload_len_end].try_into().unwrap()
-        );
-        let payload_len: usize = payload_len_u64.try_into()
+        let payload_len_u64 =
+            u64::from_le_bytes(data[payload_len_start..payload_len_end].try_into().unwrap());
+        let payload_len: usize = payload_len_u64
+            .try_into()
             .map_err(|_| Error::Format("payload length exceeds platform address space".into()))?;
 
         let payload_start = payload_len_end;
-        let payload_end = payload_start.checked_add(payload_len)
+        let payload_end = payload_start
+            .checked_add(payload_len)
             .ok_or_else(|| Error::Format("payload size overflow".into()))?;
-        let mac_end = payload_end.checked_add(32)
+        let mac_end = payload_end
+            .checked_add(32)
             .ok_or_else(|| Error::Format("mac offset overflow".into()))?;
 
         if data.len() < mac_end {
@@ -64,11 +68,21 @@ impl LayerEnvelope {
         let mut mac = [0u8; 32];
         mac.copy_from_slice(&data[payload_end..mac_end]);
 
-        Ok(Self { layer_id, nonce, payload, mac })
+        Ok(Self {
+            layer_id,
+            nonce,
+            payload,
+            mac,
+        })
     }
 
     /// Compute HMAC-SHA256 over [layer_id || nonce || payload]
-    pub fn compute_mac(mac_key: &LayerKey, layer_id: CipherId, nonce: &[u8], payload: &[u8]) -> [u8; 32] {
+    pub fn compute_mac(
+        mac_key: &LayerKey,
+        layer_id: CipherId,
+        nonce: &[u8],
+        payload: &[u8],
+    ) -> [u8; 32] {
         let mut mac = Hmac::<Sha256>::new_from_slice(mac_key.as_bytes())
             .expect("HMAC key size is always valid");
         mac.update(&[layer_id as u8]);
@@ -122,7 +136,12 @@ mod tests {
         let payload = vec![4u8; 50];
         let mac = LayerEnvelope::compute_mac(&mac_key, CipherId::XChaCha, &nonce, &payload);
 
-        let env = LayerEnvelope { layer_id: CipherId::XChaCha, nonce, payload, mac };
+        let env = LayerEnvelope {
+            layer_id: CipherId::XChaCha,
+            nonce,
+            payload,
+            mac,
+        };
         assert!(env.verify_mac(&mac_key));
     }
 
@@ -136,7 +155,12 @@ mod tests {
         let mut tampered_payload = payload;
         tampered_payload[0] ^= 0xFF;
 
-        let env = LayerEnvelope { layer_id: CipherId::Aes, nonce, payload: tampered_payload, mac };
+        let env = LayerEnvelope {
+            layer_id: CipherId::Aes,
+            nonce,
+            payload: tampered_payload,
+            mac,
+        };
         assert!(!env.verify_mac(&mac_key));
     }
 
@@ -148,7 +172,12 @@ mod tests {
         let payload = vec![8u8; 50];
         let mac = LayerEnvelope::compute_mac(&mac_key, CipherId::Twofish, &nonce, &payload);
 
-        let env = LayerEnvelope { layer_id: CipherId::Twofish, nonce, payload, mac };
+        let env = LayerEnvelope {
+            layer_id: CipherId::Twofish,
+            nonce,
+            payload,
+            mac,
+        };
         assert!(!env.verify_mac(&wrong_key));
     }
 }

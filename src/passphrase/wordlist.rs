@@ -7795,7 +7795,12 @@ mod tests {
     #[test]
     fn wordlist_is_sorted() {
         for window in EFF_WORDLIST.windows(2) {
-            assert!(window[0] <= window[1], "{} should come before {}", window[0], window[1]);
+            assert!(
+                window[0] <= window[1],
+                "{} should come before {}",
+                window[0],
+                window[1]
+            );
         }
     }
 }

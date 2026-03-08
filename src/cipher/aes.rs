@@ -1,4 +1,4 @@
-use crate::cipher::{CipherLayer, CipherId};
+use crate::cipher::{CipherId, CipherLayer};
 use crate::key::LayerKey;
 use crate::Result;
 
@@ -10,12 +10,24 @@ type Aes256CtrMode = ctr::Ctr128BE<Aes256>;
 pub struct AesCtr;
 
 impl CipherLayer for AesCtr {
-    fn id(&self) -> CipherId { CipherId::Aes }
-    fn name(&self) -> &str { "aes-256-ctr" }
-    fn encrypt_label(&self) -> &'static str { "tomb-aes-256-ctr" }
-    fn mac_label(&self) -> &'static str { "tomb-aes-256-ctr-mac" }
-    fn key_size(&self) -> usize { 32 }
-    fn nonce_size(&self) -> usize { 16 }
+    fn id(&self) -> CipherId {
+        CipherId::Aes
+    }
+    fn name(&self) -> &str {
+        "aes-256-ctr"
+    }
+    fn encrypt_label(&self) -> &'static str {
+        "tomb-aes-256-ctr"
+    }
+    fn mac_label(&self) -> &'static str {
+        "tomb-aes-256-ctr-mac"
+    }
+    fn key_size(&self) -> usize {
+        32
+    }
+    fn nonce_size(&self) -> usize {
+        16
+    }
 
     fn encrypt(&self, key: &LayerKey, nonce: &[u8], data: &[u8]) -> Result<Vec<u8>> {
         let mut buffer = data.to_vec();

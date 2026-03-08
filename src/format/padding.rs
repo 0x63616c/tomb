@@ -46,7 +46,11 @@ mod tests {
     #[test]
     fn padme_output_gte_input() {
         for size in [257, 500, 1000, 4096, 65536, 1_000_000] {
-            assert!(padme_length(size) >= size, "padme_length({size}) was {}", padme_length(size));
+            assert!(
+                padme_length(size) >= size,
+                "padme_length({size}) was {}",
+                padme_length(size)
+            );
         }
     }
 

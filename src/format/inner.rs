@@ -47,30 +47,39 @@ impl InnerHeader {
         let mut pos = 0;
 
         let read_u16 = |data: &[u8], pos: &mut usize| -> Result<u16> {
-            if *pos + 2 > data.len() { return Err(Error::Format("truncated".into())); }
+            if *pos + 2 > data.len() {
+                return Err(Error::Format("truncated".into()));
+            }
             let val = u16::from_le_bytes(data[*pos..*pos + 2].try_into().unwrap());
             *pos += 2;
             Ok(val)
         };
 
         let read_u64 = |data: &[u8], pos: &mut usize| -> Result<u64> {
-            if *pos + 8 > data.len() { return Err(Error::Format("truncated".into())); }
+            if *pos + 8 > data.len() {
+                return Err(Error::Format("truncated".into()));
+            }
             let val = u64::from_le_bytes(data[*pos..*pos + 8].try_into().unwrap());
             *pos += 8;
             Ok(val)
         };
 
         let fname_len = read_u16(data, &mut pos)? as usize;
-        let fname_end = pos.checked_add(fname_len)
+        let fname_end = pos
+            .checked_add(fname_len)
             .ok_or_else(|| Error::Format("filename length overflow".into()))?;
-        if fname_end > data.len() { return Err(Error::Format("truncated filename".into())); }
+        if fname_end > data.len() {
+            return Err(Error::Format("truncated filename".into()));
+        }
         let filename = String::from_utf8(data[pos..fname_end].to_vec())
             .map_err(|_| Error::Format("invalid utf8 filename".into()))?;
         pos = fname_end;
 
         let original_size = read_u64(data, &mut pos)?;
 
-        if pos + 64 > data.len() { return Err(Error::Format("truncated checksum".into())); }
+        if pos + 64 > data.len() {
+            return Err(Error::Format("truncated checksum".into()));
+        }
         let mut checksum = [0u8; 64];
         checksum.copy_from_slice(&data[pos..pos + 64]);
         pos += 64;
@@ -78,22 +87,30 @@ impl InnerHeader {
         let sealed_at = read_u64(data, &mut pos)?;
 
         let ver_len = read_u16(data, &mut pos)? as usize;
-        let ver_end = pos.checked_add(ver_len)
+        let ver_end = pos
+            .checked_add(ver_len)
             .ok_or_else(|| Error::Format("version length overflow".into()))?;
-        if ver_end > data.len() { return Err(Error::Format("truncated version".into())); }
+        if ver_end > data.len() {
+            return Err(Error::Format("truncated version".into()));
+        }
         let tomb_version = String::from_utf8(data[pos..ver_end].to_vec())
             .map_err(|_| Error::Format("invalid utf8 version".into()))?;
         pos = ver_end;
 
-        if pos >= data.len() { return Err(Error::Format("truncated note flag".into())); }
+        if pos >= data.len() {
+            return Err(Error::Format("truncated note flag".into()));
+        }
         let has_note = data[pos];
         pos += 1;
 
         let note = if has_note == 1 {
             let note_len = read_u16(data, &mut pos)? as usize;
-            let note_end = pos.checked_add(note_len)
+            let note_end = pos
+                .checked_add(note_len)
                 .ok_or_else(|| Error::Format("note length overflow".into()))?;
-            if note_end > data.len() { return Err(Error::Format("truncated note".into())); }
+            if note_end > data.len() {
+                return Err(Error::Format("truncated note".into()));
+            }
             let n = String::from_utf8(data[pos..note_end].to_vec())
                 .map_err(|_| Error::Format("invalid utf8 note".into()))?;
             pos = note_end;
@@ -102,7 +119,17 @@ impl InnerHeader {
             None
         };
 
-        Ok((Self { filename, original_size, checksum, sealed_at, tomb_version, note }, pos))
+        Ok((
+            Self {
+                filename,
+                original_size,
+                checksum,
+                sealed_at,
+                tomb_version,
+                note,
+            },
+            pos,
+        ))
     }
 }
 

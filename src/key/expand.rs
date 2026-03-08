@@ -1,5 +1,5 @@
-use crate::key::{MasterKey, LayerKey};
-use crate::{Error, Result, random_bytes};
+use crate::key::{LayerKey, MasterKey};
+use crate::{random_bytes, Error, Result};
 
 use hkdf::Hkdf;
 use sha2::Sha256;
@@ -16,10 +16,7 @@ pub struct LayerState {
     pub nonce: Vec<u8>,
 }
 
-pub fn expand_layer_keys(
-    master: &MasterKey,
-    layers: &[LayerInfo],
-) -> Result<Vec<LayerState>> {
+pub fn expand_layer_keys(master: &MasterKey, layers: &[LayerInfo]) -> Result<Vec<LayerState>> {
     let hk = Hkdf::<Sha256>::new(None, master.as_bytes());
     let mut states = Vec::new();
 
@@ -52,9 +49,21 @@ mod tests {
     fn expand_produces_correct_count() {
         let master = MasterKey([0xAA; 32]);
         let layer_info = vec![
-            LayerInfo { encrypt_label: "tomb-twofish-256-ctr", mac_label: "tomb-twofish-256-ctr-mac", nonce_size: 16 },
-            LayerInfo { encrypt_label: "tomb-aes-256-ctr", mac_label: "tomb-aes-256-ctr-mac", nonce_size: 16 },
-            LayerInfo { encrypt_label: "tomb-xchacha20", mac_label: "tomb-xchacha20-mac", nonce_size: 24 },
+            LayerInfo {
+                encrypt_label: "tomb-twofish-256-ctr",
+                mac_label: "tomb-twofish-256-ctr-mac",
+                nonce_size: 16,
+            },
+            LayerInfo {
+                encrypt_label: "tomb-aes-256-ctr",
+                mac_label: "tomb-aes-256-ctr-mac",
+                nonce_size: 16,
+            },
+            LayerInfo {
+                encrypt_label: "tomb-xchacha20",
+                mac_label: "tomb-xchacha20-mac",
+                nonce_size: 24,
+            },
         ];
         let states = expand_layer_keys(&master, &layer_info).unwrap();
         assert_eq!(states.len(), 3);
@@ -66,21 +75,37 @@ mod tests {
     fn expand_different_keys_per_layer() {
         let master = MasterKey([0xBB; 32]);
         let layer_info = vec![
-            LayerInfo { encrypt_label: "tomb-twofish-256-ctr", mac_label: "tomb-twofish-256-ctr-mac", nonce_size: 16 },
-            LayerInfo { encrypt_label: "tomb-aes-256-ctr", mac_label: "tomb-aes-256-ctr-mac", nonce_size: 16 },
+            LayerInfo {
+                encrypt_label: "tomb-twofish-256-ctr",
+                mac_label: "tomb-twofish-256-ctr-mac",
+                nonce_size: 16,
+            },
+            LayerInfo {
+                encrypt_label: "tomb-aes-256-ctr",
+                mac_label: "tomb-aes-256-ctr-mac",
+                nonce_size: 16,
+            },
         ];
         let states = expand_layer_keys(&master, &layer_info).unwrap();
-        assert_ne!(states[0].encrypt_key.as_bytes(), states[1].encrypt_key.as_bytes());
+        assert_ne!(
+            states[0].encrypt_key.as_bytes(),
+            states[1].encrypt_key.as_bytes()
+        );
         assert_ne!(states[0].mac_key.as_bytes(), states[1].mac_key.as_bytes());
     }
 
     #[test]
     fn expand_encrypt_key_differs_from_mac_key() {
         let master = MasterKey([0xCC; 32]);
-        let layer_info = vec![
-            LayerInfo { encrypt_label: "tomb-twofish-256-ctr", mac_label: "tomb-twofish-256-ctr-mac", nonce_size: 16 },
-        ];
+        let layer_info = vec![LayerInfo {
+            encrypt_label: "tomb-twofish-256-ctr",
+            mac_label: "tomb-twofish-256-ctr-mac",
+            nonce_size: 16,
+        }];
         let states = expand_layer_keys(&master, &layer_info).unwrap();
-        assert_ne!(states[0].encrypt_key.as_bytes(), states[0].mac_key.as_bytes());
+        assert_ne!(
+            states[0].encrypt_key.as_bytes(),
+            states[0].mac_key.as_bytes()
+        );
     }
 }

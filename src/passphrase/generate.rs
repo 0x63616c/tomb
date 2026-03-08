@@ -27,7 +27,10 @@ mod tests {
     fn generate_all_words_in_list() {
         let words = generate_passphrase(21);
         for word in &words {
-            assert!(EFF_WORDLIST.contains(&word.as_str()), "'{word}' not in EFF list");
+            assert!(
+                EFF_WORDLIST.contains(&word.as_str()),
+                "'{word}' not in EFF list"
+            );
         }
     }
 

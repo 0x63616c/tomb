@@ -1,6 +1,6 @@
-use crate::{Error, Result};
 use crate::cipher::CipherId;
 use crate::key::derive::KdfParams;
+use crate::{Error, Result};
 
 pub const FORMAT_VERSION_MAJOR: u8 = 1;
 pub const FORMAT_VERSION_MINOR: u8 = 0;
@@ -59,56 +59,85 @@ impl PublicHeader {
 
         let mut pos = 5;
 
-        if pos + 2 > data.len() { return Err(Error::Format("truncated version".into())); }
+        if pos + 2 > data.len() {
+            return Err(Error::Format("truncated version".into()));
+        }
         let version_major = data[pos];
         let version_minor = data[pos + 1];
         pos += 2;
 
-        if pos >= data.len() { return Err(Error::Format("truncated kdf count".into())); }
+        if pos >= data.len() {
+            return Err(Error::Format("truncated kdf count".into()));
+        }
         let kdf_count = data[pos] as usize;
         pos += 1;
 
         let mut kdf_chain = Vec::with_capacity(kdf_count);
         for _ in 0..kdf_count {
-            if pos >= data.len() { return Err(Error::Format("truncated kdf params".into())); }
+            if pos >= data.len() {
+                return Err(Error::Format("truncated kdf params".into()));
+            }
             let (params, consumed) = KdfParams::deserialize(&data[pos..])?;
             pos += consumed;
             kdf_chain.push(params);
         }
 
-        if pos >= data.len() { return Err(Error::Format("truncated layer count".into())); }
+        if pos >= data.len() {
+            return Err(Error::Format("truncated layer count".into()));
+        }
         let layer_count = data[pos] as usize;
         pos += 1;
 
         let mut layers = Vec::with_capacity(layer_count);
         for _ in 0..layer_count {
-            if pos + 2 > data.len() { return Err(Error::Format("truncated layer".into())); }
+            if pos + 2 > data.len() {
+                return Err(Error::Format("truncated layer".into()));
+            }
             let id = CipherId::try_from(data[pos])?;
             let nonce_size = data[pos + 1];
             pos += 2;
             layers.push(LayerDescriptor { id, nonce_size });
         }
 
-        let salt_end = pos.checked_add(32)
+        let salt_end = pos
+            .checked_add(32)
             .ok_or_else(|| Error::Format("salt offset overflow".into()))?;
-        let commitment_end = salt_end.checked_add(32)
+        let commitment_end = salt_end
+            .checked_add(32)
             .ok_or_else(|| Error::Format("commitment offset overflow".into()))?;
-        if commitment_end > data.len() { return Err(Error::Format("truncated salt/commitment".into())); }
+        if commitment_end > data.len() {
+            return Err(Error::Format("truncated salt/commitment".into()));
+        }
         let salt = data[pos..salt_end].to_vec();
         let commitment = data[salt_end..commitment_end].to_vec();
         pos = commitment_end;
 
-        let header_len_end = pos.checked_add(4)
+        let header_len_end = pos
+            .checked_add(4)
             .ok_or_else(|| Error::Format("header length offset overflow".into()))?;
-        if header_len_end > data.len() { return Err(Error::Format("truncated header length".into())); }
+        if header_len_end > data.len() {
+            return Err(Error::Format("truncated header length".into()));
+        }
         let header_len = u32::from_le_bytes(data[pos..header_len_end].try_into().unwrap()) as usize;
         pos = header_len_end;
 
         if pos != header_len {
-            return Err(Error::Format(format!("header length mismatch: expected {header_len}, got {pos}")));
+            return Err(Error::Format(format!(
+                "header length mismatch: expected {header_len}, got {pos}"
+            )));
         }
 
-        Ok((Self { version_major, version_minor, kdf_chain, layers, salt, commitment }, pos))
+        Ok((
+            Self {
+                version_major,
+                version_minor,
+                kdf_chain,
+                layers,
+                salt,
+                commitment,
+            },
+            pos,
+        ))
     }
 }
 
@@ -123,13 +152,30 @@ mod tests {
             version_major: FORMAT_VERSION_MAJOR,
             version_minor: FORMAT_VERSION_MINOR,
             kdf_chain: vec![
-                KdfParams::Scrypt { log_n: 20, r: 8, p: 1 },
-                KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 },
+                KdfParams::Scrypt {
+                    log_n: 20,
+                    r: 8,
+                    p: 1,
+                },
+                KdfParams::Argon2id {
+                    memory_kib: 1_048_576,
+                    iterations: 4,
+                    parallelism: 4,
+                },
             ],
             layers: vec![
-                LayerDescriptor { id: CipherId::Twofish, nonce_size: 16 },
-                LayerDescriptor { id: CipherId::Aes, nonce_size: 16 },
-                LayerDescriptor { id: CipherId::XChaCha, nonce_size: 24 },
+                LayerDescriptor {
+                    id: CipherId::Twofish,
+                    nonce_size: 16,
+                },
+                LayerDescriptor {
+                    id: CipherId::Aes,
+                    nonce_size: 16,
+                },
+                LayerDescriptor {
+                    id: CipherId::XChaCha,
+                    nonce_size: 24,
+                },
             ],
             salt: vec![0xAA; 32],
             commitment: vec![0xBB; 32],

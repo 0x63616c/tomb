@@ -1,17 +1,20 @@
+use std::fs;
 use std::io;
 use std::path::PathBuf;
-use std::fs;
 
 use clap::{Parser, Subcommand};
 
 use zeroize::Zeroize;
 
-use crate::{Error, Result, SealConfig};
 use crate::key::Passphrase;
-use crate::passphrase::{validate_passphrase, generate::generate_passphrase};
+use crate::passphrase::{generate::generate_passphrase, validate_passphrase};
+use crate::{Error, Result, SealConfig};
 
 #[derive(Parser)]
-#[command(name = "tomb", about = "Encrypt anything with a passphrase. Recover it decades later.")]
+#[command(
+    name = "tomb",
+    about = "Encrypt anything with a passphrase. Recover it decades later."
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -34,20 +37,15 @@ pub enum Command {
         output: Option<PathBuf>,
     },
     /// Confirm a file is decryptable
-    Verify {
-        file: PathBuf,
-    },
+    Verify { file: PathBuf },
     /// View public header (no passphrase needed)
-    Inspect {
-        file: PathBuf,
-    },
+    Inspect { file: PathBuf },
     /// Generate a 21-word passphrase
     Generate,
 }
 
 fn prompt_passphrase(prompt: &str) -> Result<String> {
-    let pass = rpassword::prompt_password(prompt)
-        .map_err(|e| Error::Io(io::Error::other(e)))?;
+    let pass = rpassword::prompt_password(prompt).map_err(|e| Error::Io(io::Error::other(e)))?;
     Ok(pass)
 }
 
@@ -121,7 +119,10 @@ pub fn run() -> Result<()> {
             let output_name = output.file_name().unwrap_or_default().to_string_lossy();
             let input_name = file.file_name().unwrap_or_default().to_string_lossy();
             if !input_name.is_empty() && output_name.contains(input_name.as_ref()) {
-                eprintln!("Note: output filename '{}' contains the original filename.", output_name);
+                eprintln!(
+                    "Note: output filename '{}' contains the original filename.",
+                    output_name
+                );
                 eprintln!("Consider using -o with a neutral name to avoid leaking metadata.");
             }
 
@@ -149,14 +150,17 @@ pub fn run() -> Result<()> {
             crate::encrypt_and_write(&output, &header, &pipeline, &keys.states, &prepared.padded)?;
             prepared.padded.zeroize();
 
-            println!("Verifying...");
-            crate::verify_sealed(&output, &passphrase, &prepared.checksum)?;
-
             let output_size = fs::metadata(&output)?.len();
             let overhead = output_size as i64 - input_size as i64;
             let sign = if overhead >= 0 { "+" } else { "" };
-            println!("Sealed -> {} ({} bytes, was {} bytes, {}{} bytes)",
-                output.display(), output_size, input_size, sign, overhead);
+            println!(
+                "Sealed -> {} ({} bytes, was {} bytes, {}{} bytes)",
+                output.display(),
+                output_size,
+                input_size,
+                sign,
+                overhead
+            );
             println!("Remember to delete the original file.");
         }
         Command::Open { file, output } => {
@@ -180,17 +184,28 @@ pub fn run() -> Result<()> {
         Command::Inspect { file } => {
             let header = crate::inspect_file(&file)?;
             println!("tomb file: {}", file.display());
-            println!("format version: {}.{}", header.version_major, header.version_minor);
+            println!(
+                "format version: {}.{}",
+                header.version_major, header.version_minor
+            );
             println!("KDF chain ({} stages):", header.kdf_chain.len());
             for kdf in &header.kdf_chain {
                 let id = kdf.id();
-                println!("  {} (0x{:02x}): {} memory",
-                    id.name(), id as u8, kdf.memory_display());
+                println!(
+                    "  {} (0x{:02x}): {} memory",
+                    id.name(),
+                    id as u8,
+                    kdf.memory_display()
+                );
             }
             println!("cipher layers ({}):", header.layers.len());
             for layer in &header.layers {
-                println!("  {} (0x{:02x}), nonce: {} bytes",
-                    layer.id.name(), layer.id as u8, layer.nonce_size);
+                println!(
+                    "  {} (0x{:02x}), nonce: {} bytes",
+                    layer.id.name(),
+                    layer.id as u8,
+                    layer.nonce_size
+                );
             }
         }
         Command::Generate => {

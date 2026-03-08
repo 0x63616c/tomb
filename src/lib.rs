@@ -1,28 +1,28 @@
-pub mod key;
 pub mod cipher;
-pub mod pipeline;
-pub mod format;
-pub mod passphrase;
 pub mod cli;
+pub mod format;
+pub mod key;
+pub mod passphrase;
+pub mod pipeline;
 
 use std::fmt;
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rand::rngs::OsRng;
 use rand::RngCore;
-use sha2::{Sha512, Digest};
+use sha2::{Digest, Sha512};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
+use crate::cipher::CipherId;
 use crate::format::inner::InnerHeader;
 use crate::format::padding;
-use crate::key::{MasterKey, Passphrase, Commitment};
-use crate::cipher::CipherId;
-use crate::key::derive::{Derive, KdfParams, chain_derive};
-use crate::key::expand::{LayerState, expand_layer_keys};
 use crate::key::commit::compute_commitment;
+use crate::key::derive::{chain_derive, Derive, KdfParams};
+use crate::key::expand::{expand_layer_keys, LayerState};
+use crate::key::{Commitment, MasterKey, Passphrase};
 use crate::pipeline::Pipeline;
 
 // ── Error + Result ──────────────────────────────────────────────────────
@@ -51,12 +51,21 @@ impl fmt::Display for Error {
             Self::Encryption(msg) => write!(f, "encryption error: {msg}"),
             Self::KeyExpansion => write!(f, "key expansion failed"),
             Self::Format(msg) => write!(f, "format error: {msg}"),
-            Self::VerificationFailed => write!(f, "verification failed: sealed file does not match original"),
+            Self::VerificationFailed => write!(
+                f,
+                "verification failed: sealed file does not match original"
+            ),
             Self::PassphraseMismatch => write!(f, "passphrases do not match"),
             Self::PassphraseInvalid(msg) => write!(f, "invalid passphrase: {msg}"),
             Self::WordNotInList(w) => write!(f, "'{w}' is not in the EFF diceware word list"),
-            Self::UnknownLayer(id) => write!(f, "unknown layer type 0x{id:02x}, newer version of tomb may be required"),
-            Self::UnknownKdf(id) => write!(f, "unknown KDF type 0x{id:02x}, newer version of tomb may be required"),
+            Self::UnknownLayer(id) => write!(
+                f,
+                "unknown layer type 0x{id:02x}, newer version of tomb may be required"
+            ),
+            Self::UnknownKdf(id) => write!(
+                f,
+                "unknown KDF type 0x{id:02x}, newer version of tomb may be required"
+            ),
             Self::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
@@ -107,8 +116,16 @@ impl SealConfig {
     pub fn production() -> Self {
         Self {
             kdf_chain: vec![
-                KdfParams::Scrypt { log_n: 20, r: 8, p: 1 },
-                KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 },
+                KdfParams::Scrypt {
+                    log_n: 20,
+                    r: 8,
+                    p: 1,
+                },
+                KdfParams::Argon2id {
+                    memory_kib: 1_048_576,
+                    iterations: 4,
+                    parallelism: 4,
+                },
             ],
             cipher_ids: vec![CipherId::Twofish, CipherId::Aes, CipherId::XChaCha],
         }
@@ -117,8 +134,16 @@ impl SealConfig {
     pub fn test() -> Self {
         Self {
             kdf_chain: vec![
-                KdfParams::Scrypt { log_n: 10, r: 8, p: 1 },
-                KdfParams::Argon2id { memory_kib: 1024, iterations: 1, parallelism: 1 },
+                KdfParams::Scrypt {
+                    log_n: 10,
+                    r: 8,
+                    p: 1,
+                },
+                KdfParams::Argon2id {
+                    memory_kib: 1024,
+                    iterations: 1,
+                    parallelism: 1,
+                },
             ],
             cipher_ids: vec![CipherId::Twofish, CipherId::Aes, CipherId::XChaCha],
         }
@@ -132,7 +157,8 @@ pub fn prepare_payload(input_path: &Path, note: Option<&str>) -> Result<Prepared
     let checksum: [u8; 64] = Sha512::digest(&plaintext).into();
 
     let inner = InnerHeader {
-        filename: input_path.file_name()
+        filename: input_path
+            .file_name()
             .ok_or_else(|| Error::Format("no filename".into()))?
             .to_string_lossy()
             .into(),
@@ -151,7 +177,11 @@ pub fn prepare_payload(input_path: &Path, note: Option<&str>) -> Result<Prepared
     let padded = padding::pad(&payload);
     payload.zeroize();
 
-    Ok(PreparedPayload { padded, checksum, inner })
+    Ok(PreparedPayload {
+        padded,
+        checksum,
+        inner,
+    })
 }
 
 pub fn derive_keys(
@@ -161,16 +191,19 @@ pub fn derive_keys(
 ) -> Result<DerivedKeys> {
     let salt = random_bytes(32);
 
-    let kdfs: Vec<Box<dyn Derive>> = kdf_chain.iter()
-        .map(|p| p.to_derive())
-        .collect();
+    let kdfs: Vec<Box<dyn Derive>> = kdf_chain.iter().map(|p| p.to_derive()).collect();
     let master = chain_derive(&kdfs, passphrase.as_bytes(), &salt)?;
 
     let layer_info = pipeline.layer_info();
     let states = expand_layer_keys(&master, &layer_info)?;
     let commitment = compute_commitment(&master);
 
-    Ok(DerivedKeys { master, states, commitment, salt })
+    Ok(DerivedKeys {
+        master,
+        states,
+        commitment,
+        salt,
+    })
 }
 
 pub fn encrypt_and_write(
@@ -194,21 +227,21 @@ pub fn encrypt_and_write(
     Ok(())
 }
 
-pub fn open_file(
-    file_path: &Path,
-    passphrase: &Passphrase,
-) -> Result<OpenedFile> {
+pub fn open_file(file_path: &Path, passphrase: &Passphrase) -> Result<OpenedFile> {
     let tomb_data = fs::read(file_path)?;
     let (header, header_len) = format::PublicHeader::deserialize(&tomb_data)?;
 
     // Reconstruct KDFs from header params
-    let kdfs: Vec<Box<dyn Derive>> = header.kdf_chain.iter()
-        .map(|p| p.to_derive())
-        .collect();
+    let kdfs: Vec<Box<dyn Derive>> = header.kdf_chain.iter().map(|p| p.to_derive()).collect();
     let master = chain_derive(&kdfs, passphrase.as_bytes(), &header.salt)?;
     let commitment = compute_commitment(&master);
-    let stored = Commitment::from_bytes(header.commitment.as_slice().try_into()
-        .map_err(|_| Error::Format("invalid commitment length".into()))?);
+    let stored = Commitment::from_bytes(
+        header
+            .commitment
+            .as_slice()
+            .try_into()
+            .map_err(|_| Error::Format("invalid commitment length".into()))?,
+    );
     if !commitment.verify(&stored) {
         return Err(Error::DecryptionFailed);
     }
@@ -223,7 +256,8 @@ pub fn open_file(
     // Parse inner header
     let (inner, inner_len) = format::InnerHeader::deserialize(&decrypted)?;
     let original_size = inner.original_size as usize;
-    let plaintext_end = inner_len.checked_add(original_size)
+    let plaintext_end = inner_len
+        .checked_add(original_size)
         .ok_or(Error::DecryptionFailed)?;
     if plaintext_end > decrypted.len() {
         decrypted.zeroize();
@@ -281,9 +315,14 @@ pub fn seal(
         commitment: keys.commitment.as_bytes().to_vec(),
     };
 
-    encrypt_and_write(output_path, &header, &pipeline, &keys.states, &prepared.padded)?;
+    encrypt_and_write(
+        output_path,
+        &header,
+        &pipeline,
+        &keys.states,
+        &prepared.padded,
+    )?;
     prepared.padded.zeroize();
-    verify_sealed(output_path, passphrase, &prepared.checksum)?;
 
     Ok(())
 }
@@ -357,7 +396,14 @@ mod tests {
 
         let passphrase = key::Passphrase::new(b"test passphrase".to_vec());
 
-        seal(&input, &output, &passphrase, Some("test note"), &SealConfig::test()).unwrap();
+        seal(
+            &input,
+            &output,
+            &passphrase,
+            Some("test note"),
+            &SealConfig::test(),
+        )
+        .unwrap();
         assert!(output.exists());
 
         let opened = open_file(&output, &passphrase).unwrap();

@@ -1,6 +1,6 @@
+pub mod commit;
 pub mod derive;
 pub mod expand;
-pub mod commit;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

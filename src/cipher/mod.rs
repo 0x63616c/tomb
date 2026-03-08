@@ -1,7 +1,7 @@
-pub mod twofish;
 pub mod aes;
-pub mod xchacha;
 pub mod lookup;
+pub mod twofish;
+pub mod xchacha;
 
 use crate::key::LayerKey;
 use crate::{Error, Result};
@@ -10,7 +10,7 @@ use crate::{Error, Result};
 #[repr(u8)]
 pub enum CipherId {
     Twofish = 0x01,
-    Aes     = 0x02,
+    Aes = 0x02,
     XChaCha = 0x03,
 }
 

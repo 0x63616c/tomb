@@ -1,4 +1,4 @@
-use crate::key::{MasterKey, Commitment};
+use crate::key::{Commitment, MasterKey};
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -6,8 +6,8 @@ use sha2::Sha256;
 const COMMITMENT_LABEL: &[u8] = b"tomb-key-commitment";
 
 pub fn compute_commitment(master: &MasterKey) -> Commitment {
-    let mut mac = Hmac::<Sha256>::new_from_slice(master.as_bytes())
-        .expect("HMAC key size is always valid");
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(master.as_bytes()).expect("HMAC key size is always valid");
     mac.update(COMMITMENT_LABEL);
     let result = mac.finalize().into_bytes();
     let mut bytes = [0u8; 32];

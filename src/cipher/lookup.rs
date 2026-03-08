@@ -1,7 +1,7 @@
-use crate::cipher::{CipherLayer, CipherId};
-use crate::cipher::twofish::TwofishCtr;
 use crate::cipher::aes::AesCtr;
+use crate::cipher::twofish::TwofishCtr;
 use crate::cipher::xchacha::XChaCha;
+use crate::cipher::{CipherId, CipherLayer};
 
 pub fn cipher_by_id(id: CipherId) -> Box<dyn CipherLayer> {
     match id {
