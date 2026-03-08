@@ -29,6 +29,9 @@ pub enum Command {
         output: Option<PathBuf>,
         #[arg(long)]
         note: Option<String>,
+        /// Skip post-seal verification (faster for large files)
+        #[arg(long)]
+        skip_verify: bool,
     },
     /// Decrypt a file
     Open {
@@ -101,7 +104,7 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Seal { file, output, note } => {
+        Command::Seal { file, output, note, skip_verify } => {
             let output = output.unwrap_or_else(|| {
                 let mut p = file.clone();
                 p.set_extension("tomb");
@@ -150,8 +153,14 @@ pub fn run() -> Result<()> {
             crate::encrypt_and_write(&output, &header, &pipeline, &keys.states, &prepared.padded)?;
             prepared.padded.zeroize();
 
-            println!("Verifying...");
-            crate::verify_sealed(&output, &passphrase, &prepared.checksum)?;
+            if !skip_verify {
+                if input_size > 100 * 1024 * 1024 {
+                    println!("Verifying (use --skip-verify to skip for large files)...");
+                } else {
+                    println!("Verifying...");
+                }
+                crate::verify_sealed(&output, &passphrase, &prepared.checksum)?;
+            }
 
             let output_size = fs::metadata(&output)?.len();
             let overhead = output_size as i64 - input_size as i64;
@@ -164,7 +173,9 @@ pub fn run() -> Result<()> {
                 sign,
                 overhead
             );
-            println!("Run 'tomb verify {}' to confirm the file is decryptable.", output.display());
+            if skip_verify {
+                println!("Run 'tomb verify {}' to confirm the file is decryptable.", output.display());
+            }
             println!("Remember to delete the original file.");
         }
         Command::Open { file, output } => {
