@@ -13,6 +13,7 @@ use crate::{Error, Result, SealConfig};
 #[derive(Parser)]
 #[command(
     name = "tomb",
+    version,
     about = "Encrypt anything with a passphrase. Recover it decades later."
 )]
 pub struct Cli {
@@ -24,37 +25,46 @@ pub struct Cli {
 pub enum Command {
     /// Encrypt a file
     Seal {
+        /// Path to the file to encrypt
         file: PathBuf,
+        /// Output path [default: <FILE>.tomb]
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Attach a plaintext note (stored encrypted inside the file)
         #[arg(long)]
         note: Option<String>,
-        /// Skip post-seal verification (faster for large files)
+        /// Skip post-seal verification
         #[arg(long)]
         skip_verify: bool,
-        /// Read passphrase from file (for scripting, avoids interactive prompt)
+        /// Read passphrase from a file instead of prompting
         #[arg(long)]
         passphrase_file: Option<PathBuf>,
     },
     /// Decrypt a file
     Open {
+        /// Path to the .tomb file
         file: PathBuf,
+        /// Output path [default: original filename from header]
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// Read passphrase from file (for scripting, avoids interactive prompt)
+        /// Read passphrase from a file instead of prompting
         #[arg(long)]
         passphrase_file: Option<PathBuf>,
     },
-    /// Confirm a file is decryptable
+    /// Verify a file can be decrypted without writing output
     Verify {
+        /// Path to the .tomb file
         file: PathBuf,
-        /// Read passphrase from file (for scripting, avoids interactive prompt)
+        /// Read passphrase from a file instead of prompting
         #[arg(long)]
         passphrase_file: Option<PathBuf>,
     },
-    /// View public header (no passphrase needed)
-    Inspect { file: PathBuf },
-    /// Generate a 21-word passphrase
+    /// Show public header details (no passphrase needed)
+    Inspect {
+        /// Path to the .tomb file
+        file: PathBuf,
+    },
+    /// Generate a random 21-word passphrase
     Generate,
 }
 
