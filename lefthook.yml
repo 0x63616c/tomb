@@ -1,7 +1,6 @@
-skip_output:
-  - meta
-  - summary
-  - execution_info
+output:
+  - failure
+  - execution_out
 
 pre-commit:
   commands:
