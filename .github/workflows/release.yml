@@ -124,26 +124,19 @@ jobs:
           body: |
             ## Install
 
-            Download the archive for your platform, extract, and move to your PATH:
-
             ```bash
-            tar xzf tomb-${{ steps.tag.outputs.TAG }}-<TARGET>.tar.gz
-            sudo mv tomb /usr/local/bin/
+            curl -fsSL https://raw.githubusercontent.com/0x63616c/tomb/main/install.sh | bash
             ```
+
+            Or download a specific platform binary from the assets below and extract manually.
 
             ## Verify checksums
 
             ```bash
-            # Download SHA256SUMS alongside your archive, then:
             sha256sum -c SHA256SUMS --ignore-missing
-            ```
-
-            Or verify a single file:
-
-            ```bash
-            sha256sum tomb-${{ steps.tag.outputs.TAG }}-<TARGET>.tar.gz
-            # Compare with the matching line in SHA256SUMS
+            # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
             ```
           files: |
             artifacts/tomb-*.tar.gz
             SHA256SUMS
+            install.sh
