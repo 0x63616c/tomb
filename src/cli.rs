@@ -160,23 +160,14 @@ pub fn run() -> Result<()> {
             println!("format version: {}.{}", header.version_major, header.version_minor);
             println!("KDF chain ({} stages):", header.kdf_chain.len());
             for kdf in &header.kdf_chain {
-                let name = match kdf.id {
-                    0x10 => "scrypt",
-                    0x11 => "argon2id",
-                    _ => "unknown",
-                };
-                println!("  {name} (0x{:02x}): {}MB memory, {} iterations, {} parallelism",
-                    kdf.id, kdf.memory_mb, kdf.iterations, kdf.parallelism);
+                let id = kdf.id();
+                println!("  {} (0x{:02x}): {} memory",
+                    id.name(), id as u8, kdf.memory_display());
             }
             println!("cipher layers ({}):", header.layers.len());
             for layer in &header.layers {
-                let name = match layer.id {
-                    0x20 => "twofish-256-ctr + hmac-sha256",
-                    0x21 => "aes-256-ctr + hmac-sha256",
-                    0x22 => "xchacha20 + hmac-sha256",
-                    _ => "unknown",
-                };
-                println!("  {name} (0x{:02x}), nonce: {} bytes", layer.id, layer.nonce_size);
+                println!("  {} (0x{:02x}), nonce: {} bytes",
+                    layer.id.name(), layer.id as u8, layer.nonce_size);
             }
         }
         Command::Generate => {

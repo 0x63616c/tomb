@@ -1,21 +1,19 @@
 use crate::{Error, Result};
+use crate::cipher::CipherId;
+use crate::key::derive::KdfParams;
 
-pub struct KdfDescriptor {
-    pub id: u8,
-    pub memory_mb: u32,
-    pub iterations: u32,
-    pub parallelism: u8,
-}
+pub const FORMAT_VERSION_MAJOR: u8 = 1;
+pub const FORMAT_VERSION_MINOR: u8 = 0;
 
 pub struct LayerDescriptor {
-    pub id: u8,
+    pub id: CipherId,
     pub nonce_size: u8,
 }
 
 pub struct PublicHeader {
     pub version_major: u8,
     pub version_minor: u8,
-    pub kdf_chain: Vec<KdfDescriptor>,
+    pub kdf_chain: Vec<KdfParams>,
     pub layers: Vec<LayerDescriptor>,
     pub salt: Vec<u8>,
     pub commitment: Vec<u8>,
@@ -23,7 +21,7 @@ pub struct PublicHeader {
 
 impl PublicHeader {
     /// Serialize: [TOMB\n][ver_major:1][ver_minor:1]
-    ///   [kdf_count:1][foreach: id:1, memory_mb:4 LE, iterations:4 LE, parallelism:1]
+    ///   [kdf_count:1][foreach: KdfParams native serialization]
     ///   [layer_count:1][foreach: id:1, nonce_size:1]
     ///   [salt:32][commitment:32]
     ///   [header_len:4 LE] (total length including this field)
@@ -36,15 +34,12 @@ impl PublicHeader {
 
         out.push(self.kdf_chain.len() as u8);
         for kdf in &self.kdf_chain {
-            out.push(kdf.id);
-            out.extend_from_slice(&kdf.memory_mb.to_le_bytes());
-            out.extend_from_slice(&kdf.iterations.to_le_bytes());
-            out.push(kdf.parallelism);
+            out.extend_from_slice(&kdf.serialize());
         }
 
         out.push(self.layers.len() as u8);
         for layer in &self.layers {
-            out.push(layer.id);
+            out.push(layer.id as u8);
             out.push(layer.nonce_size);
         }
 
@@ -75,13 +70,10 @@ impl PublicHeader {
 
         let mut kdf_chain = Vec::with_capacity(kdf_count);
         for _ in 0..kdf_count {
-            if pos + 10 > data.len() { return Err(Error::Format("truncated kdf".into())); }
-            let id = data[pos];
-            let memory_mb = u32::from_le_bytes(data[pos + 1..pos + 5].try_into().unwrap());
-            let iterations = u32::from_le_bytes(data[pos + 5..pos + 9].try_into().unwrap());
-            let parallelism = data[pos + 9];
-            pos += 10;
-            kdf_chain.push(KdfDescriptor { id, memory_mb, iterations, parallelism });
+            if pos >= data.len() { return Err(Error::Format("truncated kdf params".into())); }
+            let (params, consumed) = KdfParams::deserialize(&data[pos..])?;
+            pos += consumed;
+            kdf_chain.push(params);
         }
 
         if pos >= data.len() { return Err(Error::Format("truncated layer count".into())); }
@@ -91,7 +83,7 @@ impl PublicHeader {
         let mut layers = Vec::with_capacity(layer_count);
         for _ in 0..layer_count {
             if pos + 2 > data.len() { return Err(Error::Format("truncated layer".into())); }
-            let id = data[pos];
+            let id = CipherId::try_from(data[pos])?;
             let nonce_size = data[pos + 1];
             pos += 2;
             layers.push(LayerDescriptor { id, nonce_size });
@@ -123,20 +115,21 @@ impl PublicHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::key::derive::KdfId;
 
     #[test]
     fn public_header_round_trip() {
         let header = PublicHeader {
-            version_major: 1,
-            version_minor: 0,
+            version_major: FORMAT_VERSION_MAJOR,
+            version_minor: FORMAT_VERSION_MINOR,
             kdf_chain: vec![
-                KdfDescriptor { id: 0x10, memory_mb: 1024, iterations: 1, parallelism: 1 },
-                KdfDescriptor { id: 0x11, memory_mb: 1024, iterations: 4, parallelism: 4 },
+                KdfParams::Scrypt { log_n: 20, r: 8, p: 1 },
+                KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 },
             ],
             layers: vec![
-                LayerDescriptor { id: 0x20, nonce_size: 16 },
-                LayerDescriptor { id: 0x21, nonce_size: 16 },
-                LayerDescriptor { id: 0x22, nonce_size: 24 },
+                LayerDescriptor { id: CipherId::Twofish, nonce_size: 16 },
+                LayerDescriptor { id: CipherId::Aes, nonce_size: 16 },
+                LayerDescriptor { id: CipherId::XChaCha, nonce_size: 24 },
             ],
             salt: vec![0xAA; 32],
             commitment: vec![0xBB; 32],
@@ -147,12 +140,13 @@ mod tests {
 
         let (parsed, consumed) = PublicHeader::deserialize(&bytes).unwrap();
         assert_eq!(consumed, bytes.len());
-        assert_eq!(parsed.version_major, 1);
-        assert_eq!(parsed.version_minor, 0);
+        assert_eq!(parsed.version_major, FORMAT_VERSION_MAJOR);
+        assert_eq!(parsed.version_minor, FORMAT_VERSION_MINOR);
         assert_eq!(parsed.kdf_chain.len(), 2);
-        assert_eq!(parsed.kdf_chain[0].id, 0x10);
-        assert_eq!(parsed.kdf_chain[1].id, 0x11);
+        assert_eq!(parsed.kdf_chain[0].id(), KdfId::Scrypt);
+        assert_eq!(parsed.kdf_chain[1].id(), KdfId::Argon2id);
         assert_eq!(parsed.layers.len(), 3);
+        assert_eq!(parsed.layers[0].id, CipherId::Twofish);
         assert_eq!(parsed.salt.len(), 32);
         assert_eq!(parsed.commitment.len(), 32);
     }
@@ -160,8 +154,8 @@ mod tests {
     #[test]
     fn public_header_magic_bytes() {
         let header = PublicHeader {
-            version_major: 1,
-            version_minor: 0,
+            version_major: FORMAT_VERSION_MAJOR,
+            version_minor: FORMAT_VERSION_MINOR,
             kdf_chain: vec![],
             layers: vec![],
             salt: vec![0; 32],

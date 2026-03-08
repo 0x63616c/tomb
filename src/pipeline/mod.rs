@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use zeroize::Zeroize;
 
-use crate::cipher::{CipherLayer, CipherId};
+use crate::cipher::CipherLayer;
 use crate::cipher::twofish::TwofishCtr;
 use crate::cipher::aes::AesCtr;
 use crate::cipher::xchacha::XChaCha;
@@ -31,7 +31,7 @@ impl Pipeline {
 
     pub fn layer_descriptors(&self) -> Vec<LayerDescriptor> {
         self.layers.iter()
-            .map(|l| LayerDescriptor { id: l.id() as u8, nonce_size: l.nonce_size() as u8 })
+            .map(|l| LayerDescriptor { id: l.id(), nonce_size: l.nonce_size() as u8 })
             .collect()
     }
 
@@ -86,11 +86,8 @@ impl Pipeline {
 
     pub fn build_from_header(header: &PublicHeader) -> Result<Self> {
         let layers: Vec<Box<dyn CipherLayer>> = header.layers.iter()
-            .map(|desc| -> Result<Box<dyn CipherLayer>> {
-                let id = CipherId::try_from(desc.id)?;
-                Ok(cipher_by_id(id))
-            })
-            .collect::<Result<_>>()?;
+            .map(|desc| cipher_by_id(desc.id))
+            .collect();
         validate_no_duplicate_ids(&layers)?;
         Ok(Self { layers })
     }
@@ -111,6 +108,7 @@ fn validate_no_duplicate_ids(layers: &[Box<dyn CipherLayer>]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cipher::CipherId;
     use crate::key::MasterKey;
     use crate::key::expand::{LayerState, LayerInfo, expand_layer_keys};
     use crate::format::PublicHeader;
@@ -150,9 +148,9 @@ mod tests {
         let pipeline = Pipeline::default_tomb();
         let descs = pipeline.layer_descriptors();
         assert_eq!(descs.len(), 3);
-        assert_eq!(descs[0].id, CipherId::Twofish as u8);
-        assert_eq!(descs[1].id, CipherId::Aes as u8);
-        assert_eq!(descs[2].id, CipherId::XChaCha as u8);
+        assert_eq!(descs[0].id, CipherId::Twofish);
+        assert_eq!(descs[1].id, CipherId::Aes);
+        assert_eq!(descs[2].id, CipherId::XChaCha);
     }
 
     #[test]
@@ -191,8 +189,8 @@ mod tests {
             version_minor: 0,
             kdf_chain: vec![],
             layers: vec![
-                LayerDescriptor { id: CipherId::Twofish as u8, nonce_size: 16 },
-                LayerDescriptor { id: CipherId::Twofish as u8, nonce_size: 16 },
+                LayerDescriptor { id: CipherId::Twofish, nonce_size: 16 },
+                LayerDescriptor { id: CipherId::Twofish, nonce_size: 16 },
             ],
             salt: vec![0; 32],
             commitment: vec![0; 32],

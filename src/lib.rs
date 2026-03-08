@@ -19,7 +19,7 @@ use zeroize::Zeroize;
 use crate::format::inner::InnerHeader;
 use crate::format::padding;
 use crate::key::{MasterKey, Passphrase, Commitment};
-use crate::key::derive::{Derive, ScryptDerive, Argon2idDerive, chain_derive};
+use crate::key::derive::{Derive, KdfParams, ScryptDerive, Argon2idDerive, chain_derive};
 use crate::key::expand::{LayerState, expand_layer_keys};
 use crate::key::commit::compute_commitment;
 use crate::pipeline::Pipeline;
@@ -275,11 +275,11 @@ pub fn seal_with_params(
     let keys = derive_keys_with_params(passphrase, &pipeline)?;
 
     let header = format::PublicHeader {
-        version_major: 1,
-        version_minor: 0,
+        version_major: format::FORMAT_VERSION_MAJOR,
+        version_minor: format::FORMAT_VERSION_MINOR,
         kdf_chain: vec![
-            format::KdfDescriptor { id: 0x10, memory_mb: 1, iterations: 1, parallelism: 1 },
-            format::KdfDescriptor { id: 0x11, memory_mb: 1, iterations: 1, parallelism: 1 },
+            KdfParams::Scrypt { log_n: 10, r: 8, p: 1 },
+            KdfParams::Argon2id { memory_kib: 1024, iterations: 1, parallelism: 1 },
         ],
         layers: pipeline.layer_descriptors(),
         salt: keys.salt.clone(),
@@ -304,11 +304,11 @@ pub fn seal(
     let keys = derive_keys(passphrase, &pipeline)?;
 
     let header = format::PublicHeader {
-        version_major: 1,
-        version_minor: 0,
+        version_major: format::FORMAT_VERSION_MAJOR,
+        version_minor: format::FORMAT_VERSION_MINOR,
         kdf_chain: vec![
-            format::KdfDescriptor { id: 0x10, memory_mb: 1024, iterations: 1, parallelism: 1 },
-            format::KdfDescriptor { id: 0x11, memory_mb: 1024, iterations: 4, parallelism: 4 },
+            KdfParams::Scrypt { log_n: 20, r: 8, p: 1 },
+            KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 },
         ],
         layers: pipeline.layer_descriptors(),
         salt: keys.salt.clone(),
