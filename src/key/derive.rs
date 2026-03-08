@@ -121,7 +121,7 @@ impl KdfParams {
 }
 
 pub trait Derive {
-    fn id(&self) -> u8;
+    fn id(&self) -> KdfId;
     fn derive(&self, input: &[u8], salt: &[u8]) -> Result<MasterKey>;
 }
 
@@ -144,7 +144,7 @@ impl ScryptDerive {
 }
 
 impl Derive for ScryptDerive {
-    fn id(&self) -> u8 { 0x10 }
+    fn id(&self) -> KdfId { KdfId::Scrypt }
 
     fn derive(&self, input: &[u8], salt: &[u8]) -> Result<MasterKey> {
         let params = scrypt::Params::new(self.log_n, self.r, self.p, 32)
@@ -175,7 +175,7 @@ impl Argon2idDerive {
 }
 
 impl Derive for Argon2idDerive {
-    fn id(&self) -> u8 { 0x11 }
+    fn id(&self) -> KdfId { KdfId::Argon2id }
 
     fn derive(&self, input: &[u8], salt: &[u8]) -> Result<MasterKey> {
         let params = argon2::Params::new(self.memory_kib, self.iterations, self.parallelism, Some(32))
@@ -199,7 +199,7 @@ pub fn chain_derive(
     let mut input = passphrase.to_vec();
 
     for kdf in kdfs {
-        let label = format!("tomb-kdf-{:02x}-salt", kdf.id());
+        let label = format!("tomb-kdf-{:02x}-salt", kdf.id() as u8);
         let mut kdf_salt = vec![0u8; 32];
         prk.expand(label.as_bytes(), &mut kdf_salt)
             .map_err(|_| Error::KeyExpansion)?;
@@ -218,10 +218,10 @@ pub fn chain_derive(
 // ── KDF Lookup ──────────────────────────────────────────────────────────
 
 pub fn kdf_by_id(id: u8) -> Result<Box<dyn Derive>> {
-    match id {
-        0x10 => Ok(Box::new(ScryptDerive::production())),
-        0x11 => Ok(Box::new(Argon2idDerive::production())),
-        _ => Err(Error::UnknownKdf(id)),
+    let kdf_id = KdfId::try_from(id)?;
+    match kdf_id {
+        KdfId::Scrypt => Ok(Box::new(ScryptDerive::production())),
+        KdfId::Argon2id => Ok(Box::new(Argon2idDerive::production())),
     }
 }
 
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn scrypt_metadata() {
         let kdf = ScryptDerive::test();
-        assert_eq!(kdf.id(), 0x10);
+        assert_eq!(kdf.id(), KdfId::Scrypt);
     }
 
     #[test]
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn argon2id_metadata() {
         let kdf = Argon2idDerive::test();
-        assert_eq!(kdf.id(), 0x11);
+        assert_eq!(kdf.id(), KdfId::Argon2id);
     }
 
     #[test]
@@ -329,8 +329,8 @@ mod tests {
 
     #[test]
     fn kdf_lookup() {
-        assert_eq!(kdf_by_id(0x10).unwrap().id(), 0x10);
-        assert_eq!(kdf_by_id(0x11).unwrap().id(), 0x11);
+        assert_eq!(kdf_by_id(KdfId::Scrypt as u8).unwrap().id(), KdfId::Scrypt);
+        assert_eq!(kdf_by_id(KdfId::Argon2id as u8).unwrap().id(), KdfId::Argon2id);
         assert!(kdf_by_id(0xFF).is_err());
     }
 
@@ -370,7 +370,7 @@ mod tests {
     fn kdf_params_to_derive_scrypt() {
         let params = KdfParams::Scrypt { log_n: 10, r: 8, p: 1 };
         let d = params.to_derive();
-        assert_eq!(d.id(), 0x10);
+        assert_eq!(d.id(), KdfId::Scrypt);
         let result = d.derive(b"test", b"salt1234567890123456789012345678");
         assert!(result.is_ok());
     }
@@ -379,7 +379,7 @@ mod tests {
     fn kdf_params_to_derive_argon2id() {
         let params = KdfParams::Argon2id { memory_kib: 1024, iterations: 1, parallelism: 1 };
         let d = params.to_derive();
-        assert_eq!(d.id(), 0x11);
+        assert_eq!(d.id(), KdfId::Argon2id);
         let result = d.derive(b"test", b"salt5678901234567890123456789012");
         assert!(result.is_ok());
     }
