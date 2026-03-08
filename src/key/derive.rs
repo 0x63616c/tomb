@@ -5,6 +5,33 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use zeroize::Zeroize;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum KdfId {
+    Scrypt   = 0x01,
+    Argon2id = 0x02,
+}
+
+impl KdfId {
+    pub fn name(&self) -> &'static str {
+        match self {
+            KdfId::Scrypt => "scrypt",
+            KdfId::Argon2id => "argon2id",
+        }
+    }
+}
+
+impl TryFrom<u8> for KdfId {
+    type Error = Error;
+    fn try_from(id: u8) -> Result<Self> {
+        match id {
+            0x01 => Ok(Self::Scrypt),
+            0x02 => Ok(Self::Argon2id),
+            _ => Err(Error::UnknownKdf(id)),
+        }
+    }
+}
+
 pub trait Derive {
     fn id(&self) -> u8;
     fn derive(&self, input: &[u8], salt: &[u8]) -> Result<MasterKey>;
@@ -185,6 +212,31 @@ mod tests {
         ];
         let chained = chain_derive(&kdfs, b"passphrase", salt).unwrap();
         assert_ne!(single.as_bytes(), chained.as_bytes());
+    }
+
+    #[test]
+    fn kdf_id_try_from_valid() {
+        assert_eq!(KdfId::try_from(0x01).unwrap(), KdfId::Scrypt);
+        assert_eq!(KdfId::try_from(0x02).unwrap(), KdfId::Argon2id);
+    }
+
+    #[test]
+    fn kdf_id_try_from_invalid() {
+        assert!(KdfId::try_from(0x00).is_err());
+        assert!(KdfId::try_from(0xFF).is_err());
+    }
+
+    #[test]
+    fn kdf_id_round_trip() {
+        for id in [KdfId::Scrypt, KdfId::Argon2id] {
+            assert_eq!(KdfId::try_from(id as u8).unwrap(), id);
+        }
+    }
+
+    #[test]
+    fn kdf_id_display() {
+        assert_eq!(KdfId::Scrypt.name(), "scrypt");
+        assert_eq!(KdfId::Argon2id.name(), "argon2id");
     }
 
     #[test]
