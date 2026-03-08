@@ -52,7 +52,7 @@ fn prompt_passphrase(prompt: &str) -> Result<String> {
 fn prompt_passphrase_for_seal() -> Result<Passphrase> {
     println!("  1. Generate a secure passphrase (21 words)");
     println!("  2. Enter your own passphrase");
-    print!("Choice: ");
+    print!("Choice [1]: ");
     io::stdout().flush().ok();
 
     let mut choice = String::new();
@@ -60,7 +60,7 @@ fn prompt_passphrase_for_seal() -> Result<Passphrase> {
         .map_err(Error::Io)?;
 
     match choice.trim() {
-        "1" => {
+        "1" | "" => {
             let words = generate_passphrase(21);
 
             // Alternate screen buffer
@@ -111,6 +111,13 @@ pub fn run() -> Result<()> {
                 p
             });
 
+            if output.exists() {
+                return Err(Error::Format(format!(
+                    "output file '{}' already exists, use -o to specify a different path",
+                    output.display()
+                )));
+            }
+
             // Warn if output filename leaks original name
             let output_name = output.file_name().unwrap_or_default().to_string_lossy();
             let input_name = file.file_name().unwrap_or_default().to_string_lossy();
@@ -136,6 +143,12 @@ pub fn run() -> Result<()> {
             let passphrase = prompt_passphrase_for_open()?;
             let result = crate::open_file(&file, &passphrase)?;
             let output = output.unwrap_or_else(|| PathBuf::from(&result.filename));
+            if output.exists() {
+                return Err(Error::Format(format!(
+                    "output file '{}' already exists, use -o to specify a different path",
+                    output.display()
+                )));
+            }
             fs::write(&output, &result.data)?;
             println!("Opened -> {}", output.display());
         }
