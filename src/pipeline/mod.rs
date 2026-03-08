@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use zeroize::Zeroize;
 
-use crate::cipher::CipherLayer;
+use crate::cipher::{CipherLayer, CipherId};
 use crate::cipher::twofish::TwofishCtr;
 use crate::cipher::aes::AesCtr;
 use crate::cipher::xchacha::XChaCha;
@@ -84,6 +84,14 @@ impl Pipeline {
         Ok(data)
     }
 
+    pub fn from_cipher_ids(ids: &[CipherId]) -> Result<Self> {
+        let layers: Vec<Box<dyn CipherLayer>> = ids.iter()
+            .map(|id| cipher_by_id(*id))
+            .collect();
+        validate_no_duplicate_ids(&layers)?;
+        Ok(Self { layers })
+    }
+
     pub fn build_from_header(header: &PublicHeader) -> Result<Self> {
         let layers: Vec<Box<dyn CipherLayer>> = header.layers.iter()
             .map(|desc| cipher_by_id(desc.id))
@@ -108,7 +116,6 @@ fn validate_no_duplicate_ids(layers: &[Box<dyn CipherLayer>]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cipher::CipherId;
     use crate::key::MasterKey;
     use crate::key::expand::{LayerState, LayerInfo, expand_layer_keys};
     use crate::format::PublicHeader;
