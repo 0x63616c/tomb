@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: false
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            cross: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --locked
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build (native)
+        if: "!matrix.cross"
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Strip binary (Linux)
+        if: contains(matrix.target, 'linux') && !matrix.cross
+        run: strip target/${{ matrix.target }}/release/tomb
+
+      - name: Strip binary (Linux cross / aarch64)
+        if: contains(matrix.target, 'linux') && matrix.cross
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+          aarch64-linux-gnu-strip target/${{ matrix.target }}/release/tomb
+
+      # macOS release profile already strips via Cargo.toml (strip = true)
+
+      - name: Determine tag
+        id: tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Package tarball
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../tomb-${{ steps.tag.outputs.TAG }}-${{ matrix.target }}.tar.gz tomb
+          cd ../../..
+
+      - name: Generate checksum
+        run: |
+          shasum -a 256 tomb-${{ steps.tag.outputs.TAG }}-${{ matrix.target }}.tar.gz \
+            > tomb-${{ steps.tag.outputs.TAG }}-${{ matrix.target }}.tar.gz.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tomb-${{ matrix.target }}
+          path: |
+            tomb-*.tar.gz
+            tomb-*.tar.gz.sha256
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine tag
+        id: tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create combined SHA256SUMS
+        run: |
+          cd artifacts
+          cat *.sha256 | sort > SHA256SUMS
+          cd ..
+          cp artifacts/SHA256SUMS .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: tomb ${{ steps.tag.outputs.TAG }}
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.TAG, '-') }}
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            Download the archive for your platform, extract, and move to your PATH:
+
+            ```bash
+            tar xzf tomb-${{ steps.tag.outputs.TAG }}-<TARGET>.tar.gz
+            sudo mv tomb /usr/local/bin/
+            ```
+
+            ## Verify checksums
+
+            ```bash
+            # Download SHA256SUMS alongside your archive, then:
+            sha256sum -c SHA256SUMS --ignore-missing
+            ```
+
+            Or verify a single file:
+
+            ```bash
+            sha256sum tomb-${{ steps.tag.outputs.TAG }}-<TARGET>.tar.gz
+            # Compare with the matching line in SHA256SUMS
+            ```
+          files: |
+            artifacts/tomb-*.tar.gz
+            SHA256SUMS
