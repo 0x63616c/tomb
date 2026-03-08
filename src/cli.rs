@@ -14,6 +14,12 @@ use crate::{Error, Result, SealConfig};
 #[command(
     name = "tomb",
     version,
+    long_version = concat!(
+        env!("CARGO_PKG_VERSION"),
+        " (",
+        env!("TOMB_GIT_SHA"),
+        ")"
+    ),
     about = "Encrypt anything with a passphrase. Recover it decades later.",
     arg_required_else_help = true,
     after_help = "Examples:
@@ -76,6 +82,8 @@ pub enum Command {
     },
     /// Generate a random 21-word diceware passphrase
     Generate,
+    /// Update tomb to the latest release
+    Update,
 }
 
 fn prompt_passphrase(prompt: &str) -> Result<String> {
@@ -152,6 +160,102 @@ fn cli_config() -> SealConfig {
         return SealConfig::test();
     }
     SealConfig::production()
+}
+
+fn run_update() -> Result<()> {
+    let current = env!("CARGO_PKG_VERSION");
+    let target = env!("TOMB_TARGET");
+
+    // Fetch latest release tag from GitHub API
+    let api_url = "https://api.github.com/repos/0x63616c/tomb/releases/latest";
+    let response = std::process::Command::new("curl")
+        .args(["-fsSL", "--user-agent", "tomb-updater", api_url])
+        .output()
+        .map_err(Error::Io)?;
+
+    if !response.status.success() {
+        return Err(Error::Format("Failed to fetch latest release info".into()));
+    }
+
+    let body = String::from_utf8_lossy(&response.stdout);
+    let tag = extract_json_string(&body, "tag_name")
+        .ok_or_else(|| Error::Format("Could not parse release tag from GitHub API".into()))?;
+
+    let latest = tag.trim_start_matches('v');
+
+    if latest == current {
+        println!("Already up to date ({})", current);
+        return Ok(());
+    }
+
+    println!("Updating {} -> {}...", current, latest);
+
+    // Download tarball to temp dir
+    let tarball_name = format!("tomb-{}-{}.tar.gz", tag, target);
+    let url = format!(
+        "https://github.com/0x63616c/tomb/releases/download/{}/{}",
+        tag, tarball_name
+    );
+
+    let tmp = std::env::temp_dir().join(format!("tomb-update-{}", latest));
+    std::fs::create_dir_all(&tmp)?;
+
+    let tarball_path = tmp.join(&tarball_name);
+
+    let download = std::process::Command::new("curl")
+        .args(["-fsSL", "-o", tarball_path.to_str().unwrap(), &url])
+        .status()
+        .map_err(Error::Io)?;
+
+    if !download.success() {
+        let _ = std::fs::remove_dir_all(&tmp);
+        return Err(Error::Format(format!(
+            "Failed to download {}. Is {} a supported platform?",
+            url, target
+        )));
+    }
+
+    // Extract binary
+    let extract = std::process::Command::new("tar")
+        .args(["xzf", tarball_path.to_str().unwrap(), "-C", tmp.to_str().unwrap()])
+        .status()
+        .map_err(Error::Io)?;
+
+    if !extract.success() {
+        let _ = std::fs::remove_dir_all(&tmp);
+        return Err(Error::Format("Failed to extract tarball".into()));
+    }
+
+    // Atomically replace own binary
+    let new_binary = tmp.join("tomb");
+    let current_exe = std::env::current_exe().map_err(Error::Io)?;
+
+    // Write to a sibling temp file then rename (atomic on POSIX)
+    let tmp_exe = current_exe.with_extension("tmp");
+    std::fs::copy(&new_binary, &tmp_exe)?;
+    std::fs::rename(&tmp_exe, &current_exe)?;
+
+    let _ = std::fs::remove_dir_all(&tmp);
+
+    println!("Updated to {}. Run 'tomb --version' to confirm.", latest);
+    Ok(())
+}
+
+/// Extract a string value from JSON by key. Simple, no dep.
+/// Works for flat string fields like `"tag_name": "v0.1.0"`.
+fn extract_json_string<'a>(json: &'a str, key: &str) -> Option<&'a str> {
+    let search = format!("\"{}\"", key);
+    let key_pos = json.find(&search)?;
+    let after_key = &json[key_pos + search.len()..];
+    // Skip whitespace and colon
+    let colon_pos = after_key.find(':')?;
+    let after_colon = after_key[colon_pos + 1..].trim_start();
+    if !after_colon.starts_with('"') {
+        return None;
+    }
+    let value_start = &after_colon[1..];
+    let value_end = value_start.find('"')?;
+    Some(&value_start[..value_end])
 }
 
 pub fn run() -> Result<()> {
@@ -289,6 +393,9 @@ pub fn run() -> Result<()> {
             let mut buf = String::new();
             io::stdin().read_line(&mut buf).ok();
             print!("\x1b[?1049l");
+        }
+        Command::Update => {
+            run_update()?;
         }
     }
 
