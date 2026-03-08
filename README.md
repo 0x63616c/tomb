@@ -21,11 +21,12 @@ This is not security theatre. This is the math.
 ## Usage
 
 ```
-tomb generate             # Generate a 21-word passphrase
-tomb seal <file>          # Encrypt a file
-tomb open <file.tomb>     # Decrypt a file
-tomb verify <file.tomb>   # Confirm a file is decryptable
-tomb inspect <file.tomb>  # View public header (no passphrase needed)
+tomb generate                    # Generate a 21-word passphrase
+tomb seal <file>                 # Encrypt a file
+tomb seal <file> --skip-verify   # Encrypt without post-seal verification (faster for large files)
+tomb open <file.tomb>            # Decrypt a file
+tomb verify <file.tomb>          # Confirm a file is decryptable
+tomb inspect <file.tomb>         # View public header (no passphrase needed)
 ```
 
 ## How it works
@@ -35,7 +36,7 @@ tomb inspect <file.tomb>  # View public header (no passphrase needed)
 3. Per-layer keys are expanded via HKDF-SHA256 with domain separation
 4. Your file is encrypted through three layers: Twofish-256-CTR, AES-256-CTR, XChaCha20
 5. Each layer is independently authenticated via HMAC-SHA256 (Encrypt-then-MAC)
-6. tomb automatically verifies the sealed file by decrypting and comparing checksums
+6. tomb verifies the sealed file by decrypting and comparing checksums (skip with `--skip-verify`)
 7. A single `.tomb` file is produced. Store it anywhere.
 
 ## Quantum resistance
