@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 
+use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
 use crate::key::Passphrase;
@@ -97,8 +98,9 @@ fn normalize_whitespace(input: &str) -> String {
 }
 
 fn read_passphrase_file(path: &Path) -> Result<Passphrase> {
-    let contents = fs::read_to_string(path)?;
+    let mut contents = fs::read_to_string(path)?;
     let pass = normalize_whitespace(contents.trim_end_matches('\n'));
+    contents.zeroize();
     Ok(Passphrase::new(pass.into_bytes()))
 }
 
@@ -109,8 +111,9 @@ fn passphrase_for_seal(passphrase_file: Option<&Path>) -> Result<Passphrase> {
         return Ok(passphrase);
     }
 
-    let p1 = prompt_passphrase("Enter passphrase (or press Enter to generate one): ")?;
-    let p1 = normalize_whitespace(&p1);
+    let mut p1_raw = prompt_passphrase("Enter passphrase (or press Enter to generate one): ")?;
+    let mut p1 = normalize_whitespace(&p1_raw);
+    p1_raw.zeroize();
 
     if p1.is_empty() {
         let words = generate_passphrase(21);
@@ -127,20 +130,28 @@ fn passphrase_for_seal(passphrase_file: Option<&Path>) -> Result<Passphrase> {
         print!("\x1b[?1049l");
 
         println!("Re-enter your passphrase to confirm:");
-        let entered = prompt_passphrase("Passphrase: ")?;
-        let entered = normalize_whitespace(&entered);
-        let generated = words.join(" ");
-        if entered != generated {
+        let mut entered_raw = prompt_passphrase("Passphrase: ")?;
+        let mut entered = normalize_whitespace(&entered_raw);
+        entered_raw.zeroize();
+        let mut generated = words.join(" ");
+        if !bool::from(entered.as_bytes().ct_eq(generated.as_bytes())) {
+            entered.zeroize();
+            generated.zeroize();
             return Err(Error::PassphraseMismatch);
         }
+        entered.zeroize();
         Ok(Passphrase::new(generated.into_bytes()))
     } else {
         validate_passphrase(&p1)?;
-        let p2 = prompt_passphrase("Confirm passphrase: ")?;
-        let p2 = normalize_whitespace(&p2);
-        if p1 != p2 {
+        let mut p2_raw = prompt_passphrase("Confirm passphrase: ")?;
+        let mut p2 = normalize_whitespace(&p2_raw);
+        p2_raw.zeroize();
+        if !bool::from(p1.as_bytes().ct_eq(p2.as_bytes())) {
+            p2.zeroize();
+            p1.zeroize();
             return Err(Error::PassphraseMismatch);
         }
+        p2.zeroize();
         Ok(Passphrase::new(p1.into_bytes()))
     }
 }
@@ -149,8 +160,9 @@ fn passphrase_for_open(passphrase_file: Option<&Path>) -> Result<Passphrase> {
     if let Some(path) = passphrase_file {
         return read_passphrase_file(path);
     }
-    let pass = prompt_passphrase("Enter passphrase: ")?;
-    let pass = normalize_whitespace(&pass);
+    let mut pass_raw = prompt_passphrase("Enter passphrase: ")?;
+    let pass = normalize_whitespace(&pass_raw);
+    pass_raw.zeroize();
     Ok(Passphrase::new(pass.into_bytes()))
 }
 
@@ -282,10 +294,24 @@ pub fn run() -> Result<()> {
 
             if output.exists() {
                 return Err(Error::Format(format!(
-                    "output file '{}' already exists, use -o to specify a different path",
+                    "output file '{}' already exists, choose a different output path",
                     output.display()
                 )));
             }
+
+            let input_meta = fs::metadata(&file).map_err(|e| {
+                Error::Io(io::Error::new(
+                    e.kind(),
+                    format!("{}: {}", file.display(), e),
+                ))
+            })?;
+            if !input_meta.is_file() {
+                return Err(Error::Format(format!(
+                    "'{}' is not a regular file",
+                    file.display()
+                )));
+            }
+            let input_size = input_meta.len();
 
             // Warn if output filename leaks original name
             let output_name = output.file_name().unwrap_or_default().to_string_lossy();
@@ -297,8 +323,6 @@ pub fn run() -> Result<()> {
                 );
                 eprintln!("Consider using -o with a neutral name to avoid leaking metadata.");
             }
-
-            let input_size = fs::metadata(&file)?.len();
 
             let passphrase = passphrase_for_seal(passphrase_file.as_deref())?;
             let config = cli_config();
@@ -356,27 +380,49 @@ pub fn run() -> Result<()> {
             passphrase_file,
         } => {
             let passphrase = passphrase_for_open(passphrase_file.as_deref())?;
-            let result = crate::open_file(&file, &passphrase)?;
+            let result = crate::open_file(&file, &passphrase).map_err(|e| match e {
+                Error::Io(io_err) => Error::Io(io::Error::new(
+                    io_err.kind(),
+                    format!("{}: {}", file.display(), io_err),
+                )),
+                other => other,
+            })?;
             let output = output.unwrap_or_else(|| PathBuf::from(&result.filename));
             if output.exists() {
                 return Err(Error::Format(format!(
-                    "output file '{}' already exists, use -o to specify a different path",
+                    "output file '{}' already exists, choose a different output path",
                     output.display()
                 )));
             }
             fs::write(&output, &result.data)?;
-            println!("Opened -> {}", output.display());
+            if let Some(ref note) = result.note {
+                println!("Note: {}", note);
+            }
+            let display_path = output.canonicalize().unwrap_or_else(|_| output.clone());
+            println!("Opened -> {}", display_path.display());
         }
         Command::Verify {
             file,
             passphrase_file,
         } => {
             let passphrase = passphrase_for_open(passphrase_file.as_deref())?;
-            crate::open_file(&file, &passphrase)?;
+            crate::open_file(&file, &passphrase).map_err(|e| match e {
+                Error::Io(io_err) => Error::Io(io::Error::new(
+                    io_err.kind(),
+                    format!("{}: {}", file.display(), io_err),
+                )),
+                other => other,
+            })?;
             println!("Verified. File is decryptable.");
         }
         Command::Inspect { file } => {
-            let header = crate::inspect_file(&file)?;
+            let header = crate::inspect_file(&file).map_err(|e| match e {
+                Error::Io(io_err) => Error::Io(io::Error::new(
+                    io_err.kind(),
+                    format!("{}: {}", file.display(), io_err),
+                )),
+                other => other,
+            })?;
             println!("tomb file: {}", file.display());
             println!(
                 "format version: {}.{}",

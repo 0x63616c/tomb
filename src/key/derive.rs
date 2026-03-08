@@ -133,7 +133,11 @@ impl KdfParams {
     pub fn memory_display(&self) -> String {
         match self {
             KdfParams::Scrypt { log_n, r, .. } => {
-                let bytes = (1u64 << *log_n as u64) * (*r as u64) * 128;
+                let bytes = 1u64
+                    .checked_shl(*log_n as u32)
+                    .unwrap_or(u64::MAX)
+                    .saturating_mul(*r as u64)
+                    .saturating_mul(128);
                 format!("{}MB", bytes / (1024 * 1024))
             }
             KdfParams::Argon2id { memory_kib, .. } => {
@@ -251,7 +255,13 @@ pub fn chain_derive(kdfs: &[Box<dyn Derive>], passphrase: &[u8], salt: &[u8]) ->
         input = result.as_bytes().to_vec();
     }
 
-    assert_eq!(input.len(), 32, "KDF chain must produce 32-byte key");
+    if input.len() != 32 {
+        input.zeroize();
+        return Err(Error::Encryption(format!(
+            "KDF chain must produce 32-byte key, got {}",
+            input.len()
+        )));
+    }
     let mut key = [0u8; 32];
     key.copy_from_slice(&input);
     input.zeroize();

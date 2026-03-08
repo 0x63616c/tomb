@@ -13,9 +13,10 @@ impl InnerHeader {
     /// Serialize: [filename_len:2 LE][filename][original_size:8 LE][checksum:64]
     ///            [sealed_at:8 LE][version_len:2 LE][version]
     ///            [has_note:1][note_len:2 LE][note]  (note fields only if has_note=1)
-    pub fn serialize(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
 
+        // filename: OS-bounded (PATH_MAX), safe u16 cast
         let fname = self.filename.as_bytes();
         out.extend_from_slice(&(fname.len() as u16).to_le_bytes());
         out.extend_from_slice(fname);
@@ -24,6 +25,7 @@ impl InnerHeader {
         out.extend_from_slice(&self.checksum);
         out.extend_from_slice(&self.sealed_at.to_le_bytes());
 
+        // version: compile-time constant, safe u16 cast
         let ver = self.tomb_version.as_bytes();
         out.extend_from_slice(&(ver.len() as u16).to_le_bytes());
         out.extend_from_slice(ver);
@@ -32,6 +34,9 @@ impl InnerHeader {
             Some(note) => {
                 out.push(1);
                 let note_bytes = note.as_bytes();
+                if note_bytes.len() > 65535 {
+                    return Err(Error::Format("note exceeds 65535 bytes".into()));
+                }
                 out.extend_from_slice(&(note_bytes.len() as u16).to_le_bytes());
                 out.extend_from_slice(note_bytes);
             }
@@ -40,7 +45,7 @@ impl InnerHeader {
             }
         }
 
-        out
+        Ok(out)
     }
 
     pub fn deserialize(data: &[u8]) -> Result<(Self, usize)> {
@@ -147,7 +152,7 @@ mod tests {
             tomb_version: "0.1.0".into(),
             note: Some("test note".into()),
         };
-        let bytes = header.serialize();
+        let bytes = header.serialize().unwrap();
         let (parsed, consumed) = InnerHeader::deserialize(&bytes).unwrap();
         assert_eq!(consumed, bytes.len());
         assert_eq!(parsed.filename, "secret.json");
@@ -168,7 +173,7 @@ mod tests {
             tomb_version: "0.1.0".into(),
             note: None,
         };
-        let bytes = header.serialize();
+        let bytes = header.serialize().unwrap();
         let (parsed, _) = InnerHeader::deserialize(&bytes).unwrap();
         assert!(parsed.note.is_none());
     }
@@ -182,7 +187,7 @@ mod tests {
             tomb_version: "0.1.0".into(),
             note: Some("a note".into()),
         };
-        header.serialize()
+        header.serialize().unwrap()
     }
 
     #[test]
