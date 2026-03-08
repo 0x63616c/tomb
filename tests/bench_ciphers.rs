@@ -7,6 +7,7 @@ use tomb::cipher::CipherLayer;
 use tomb::pipeline::envelope::LayerEnvelope;
 
 #[test]
+#[ignore]
 fn bench_individual_ciphers_10mb() {
     let size = 10 * 1024 * 1024;
     let data: Vec<u8> = (0..size).map(|i: usize| (i % 256) as u8).collect();

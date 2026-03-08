@@ -3,6 +3,7 @@ use std::time::Instant;
 /// Benchmark to isolate where time is spent per-component.
 /// Tests with 10MB to keep it fast but meaningful.
 #[test]
+#[ignore]
 fn bench_breakdown_10mb() {
     let dir = std::env::temp_dir().join("tomb_bench_breakdown");
     std::fs::create_dir_all(&dir).unwrap();

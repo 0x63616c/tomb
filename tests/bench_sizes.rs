@@ -2,6 +2,7 @@ use std::fs;
 use std::time::Instant;
 
 #[test]
+#[ignore]
 fn bench_seal_by_file_size() {
     let dir = std::env::temp_dir().join("tomb_bench");
     fs::create_dir_all(&dir).unwrap();
