@@ -1,3 +1,8 @@
+skip_output:
+  - meta
+  - summary
+  - execution_info
+
 pre-commit:
   commands:
     fmt:
