@@ -65,24 +65,46 @@ fn seal_then_open_byte_identical() {
 
     // Seal
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", dir.join("sealed.tomb").to_str().unwrap(), "--skip-verify"],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            dir.join("sealed.tomb").to_str().unwrap(),
+            "--skip-verify",
+        ],
         &dir,
         &pass_file,
     );
-    assert!(output.status.success(), "seal failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "seal failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(dir.join("sealed.tomb").exists());
 
     // Open
     let output = tomb(
-        &["open", dir.join("sealed.tomb").to_str().unwrap(), "-o", dir.join("recovered.bin").to_str().unwrap()],
+        &[
+            "open",
+            dir.join("sealed.tomb").to_str().unwrap(),
+            "-o",
+            dir.join("recovered.bin").to_str().unwrap(),
+        ],
         &dir,
         &pass_file,
     );
-    assert!(output.status.success(), "open failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "open failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Byte-for-byte identical
     let recovered = fs::read(dir.join("recovered.bin")).unwrap();
-    assert_eq!(content, recovered, "recovered file is not byte-identical to original");
+    assert_eq!(
+        content, recovered,
+        "recovered file is not byte-identical to original"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -97,7 +119,13 @@ fn seal_then_verify() {
 
     // Seal
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", dir.join("data.tomb").to_str().unwrap(), "--skip-verify"],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            dir.join("data.tomb").to_str().unwrap(),
+            "--skip-verify",
+        ],
         &dir,
         &pass_file,
     );
@@ -111,7 +139,10 @@ fn seal_then_verify() {
     );
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Verified"), "expected 'Verified' in output: {stdout}");
+    assert!(
+        stdout.contains("Verified"),
+        "expected 'Verified' in output: {stdout}"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -126,23 +157,32 @@ fn inspect_shows_header() {
 
     // Seal
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", dir.join("data.tomb").to_str().unwrap(), "--skip-verify"],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            dir.join("data.tomb").to_str().unwrap(),
+            "--skip-verify",
+        ],
         &dir,
         &pass_file,
     );
     assert!(output.status.success());
 
     // Inspect (no passphrase needed)
-    let output = tomb_no_pass(
-        &["inspect", dir.join("data.tomb").to_str().unwrap()],
-        &dir,
-    );
+    let output = tomb_no_pass(&["inspect", dir.join("data.tomb").to_str().unwrap()], &dir);
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("format version: 1.0"), "missing version: {stdout}");
+    assert!(
+        stdout.contains("format version: 1.0"),
+        "missing version: {stdout}"
+    );
     assert!(stdout.contains("scrypt"), "missing scrypt: {stdout}");
     assert!(stdout.contains("argon2id"), "missing argon2id: {stdout}");
-    assert!(stdout.contains("cipher layers (3)"), "missing cipher layers: {stdout}");
+    assert!(
+        stdout.contains("cipher layers (3)"),
+        "missing cipher layers: {stdout}"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -157,7 +197,13 @@ fn wrong_passphrase_fails() {
 
     // Seal with correct passphrase
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", dir.join("data.tomb").to_str().unwrap(), "--skip-verify"],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            dir.join("data.tomb").to_str().unwrap(),
+            "--skip-verify",
+        ],
         &dir,
         &pass_file,
     );
@@ -190,13 +236,21 @@ fn output_already_exists_fails() {
 
     // Seal should fail because output exists
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", tomb_file.to_str().unwrap()],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            tomb_file.to_str().unwrap(),
+        ],
         &dir,
         &pass_file,
     );
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("already exists"), "expected 'already exists': {stderr}");
+    assert!(
+        stderr.contains("already exists"),
+        "expected 'already exists': {stderr}"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -210,7 +264,15 @@ fn seal_with_note() {
     fs::write(&input, b"noted content").unwrap();
 
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", dir.join("data.tomb").to_str().unwrap(), "--note", "my important note", "--skip-verify"],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            dir.join("data.tomb").to_str().unwrap(),
+            "--note",
+            "my important note",
+            "--skip-verify",
+        ],
         &dir,
         &pass_file,
     );
@@ -218,12 +280,20 @@ fn seal_with_note() {
 
     // Open and verify content is intact
     let output = tomb(
-        &["open", dir.join("data.tomb").to_str().unwrap(), "-o", dir.join("recovered.txt").to_str().unwrap()],
+        &[
+            "open",
+            dir.join("data.tomb").to_str().unwrap(),
+            "-o",
+            dir.join("recovered.txt").to_str().unwrap(),
+        ],
         &dir,
         &pass_file,
     );
     assert!(output.status.success());
-    assert_eq!(fs::read(dir.join("recovered.txt")).unwrap(), b"noted content");
+    assert_eq!(
+        fs::read(dir.join("recovered.txt")).unwrap(),
+        b"noted content"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -238,13 +308,22 @@ fn filename_leak_warning() {
 
     // Output name "secret.tomb" contains input name "secret", so warning should fire
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", dir.join("secret.tomb").to_str().unwrap(), "--skip-verify"],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            dir.join("secret.tomb").to_str().unwrap(),
+            "--skip-verify",
+        ],
         &dir,
         &pass_file,
     );
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("contains the original filename"), "expected leak warning: {stderr}");
+    assert!(
+        stderr.contains("contains the original filename"),
+        "expected leak warning: {stderr}"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }
@@ -278,14 +357,25 @@ fn empty_file_round_trip() {
     fs::write(&input, b"").unwrap();
 
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", dir.join("empty.tomb").to_str().unwrap(), "--skip-verify"],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            dir.join("empty.tomb").to_str().unwrap(),
+            "--skip-verify",
+        ],
         &dir,
         &pass_file,
     );
     assert!(output.status.success());
 
     let output = tomb(
-        &["open", dir.join("empty.tomb").to_str().unwrap(), "-o", dir.join("recovered.bin").to_str().unwrap()],
+        &[
+            "open",
+            dir.join("empty.tomb").to_str().unwrap(),
+            "-o",
+            dir.join("recovered.bin").to_str().unwrap(),
+        ],
         &dir,
         &pass_file,
     );
@@ -304,7 +394,13 @@ fn open_preserves_original_filename() {
     fs::write(&input, b"data").unwrap();
 
     let output = tomb(
-        &["seal", input.to_str().unwrap(), "-o", dir.join("sealed.tomb").to_str().unwrap(), "--skip-verify"],
+        &[
+            "seal",
+            input.to_str().unwrap(),
+            "-o",
+            dir.join("sealed.tomb").to_str().unwrap(),
+            "--skip-verify",
+        ],
         &dir,
         &pass_file,
     );
@@ -319,7 +415,11 @@ fn open_preserves_original_filename() {
         &dir,
         &pass_file,
     );
-    assert!(output.status.success(), "open failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "open failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(dir.join("original_name.dat").exists());
     assert_eq!(fs::read(dir.join("original_name.dat")).unwrap(), b"data");
 

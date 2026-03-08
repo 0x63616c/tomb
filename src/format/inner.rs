@@ -233,7 +233,7 @@ mod tests {
         data.extend_from_slice(fname);
         data.extend_from_slice(&100u64.to_le_bytes());
         data.extend_from_slice(&[0xAA; 64]); // full checksum
-        // Missing: sealed_at, version, note
+                                             // Missing: sealed_at, version, note
         assert!(InnerHeader::deserialize(&data).is_err());
     }
 

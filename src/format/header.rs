@@ -303,7 +303,7 @@ mod tests {
         partial.push(0);
         partial.push(0); // 0 KDFs
         partial.push(0); // 0 layers
-        // Missing salt and commitment
+                         // Missing salt and commitment
         assert!(PublicHeader::deserialize(&partial).is_err());
     }
 

@@ -217,7 +217,12 @@ fn run_update() -> Result<()> {
 
     // Extract binary
     let extract = std::process::Command::new("tar")
-        .args(["xzf", tarball_path.to_str().unwrap(), "-C", tmp.to_str().unwrap()])
+        .args([
+            "xzf",
+            tarball_path.to_str().unwrap(),
+            "-C",
+            tmp.to_str().unwrap(),
+        ])
         .status()
         .map_err(Error::Io)?;
 
@@ -262,7 +267,13 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Seal { file, output, note, skip_verify, passphrase_file } => {
+        Command::Seal {
+            file,
+            output,
+            note,
+            skip_verify,
+            passphrase_file,
+        } => {
             let output = output.unwrap_or_else(|| {
                 let mut p = file.clone();
                 p.set_extension("tomb");
@@ -332,11 +343,18 @@ pub fn run() -> Result<()> {
                 overhead
             );
             if skip_verify {
-                println!("Run 'tomb verify {}' to confirm the file is decryptable.", output.display());
+                println!(
+                    "Run 'tomb verify {}' to confirm the file is decryptable.",
+                    output.display()
+                );
             }
             println!("Remember to delete the original file.");
         }
-        Command::Open { file, output, passphrase_file } => {
+        Command::Open {
+            file,
+            output,
+            passphrase_file,
+        } => {
             let passphrase = passphrase_for_open(passphrase_file.as_deref())?;
             let result = crate::open_file(&file, &passphrase)?;
             let output = output.unwrap_or_else(|| PathBuf::from(&result.filename));
@@ -349,7 +367,10 @@ pub fn run() -> Result<()> {
             fs::write(&output, &result.data)?;
             println!("Opened -> {}", output.display());
         }
-        Command::Verify { file, passphrase_file } => {
+        Command::Verify {
+            file,
+            passphrase_file,
+        } => {
             let passphrase = passphrase_for_open(passphrase_file.as_deref())?;
             crate::open_file(&file, &passphrase)?;
             println!("Verified. File is decryptable.");

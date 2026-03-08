@@ -164,7 +164,10 @@ fn open_truncated_file() {
         let truncated_path = dir.join(format!("trunc_{truncate_at}.tomb"));
         std::fs::write(&truncated_path, &full[..truncate_at]).unwrap();
         let result = tomb::open_file(&truncated_path, &passphrase);
-        assert!(result.is_err(), "should fail when truncated at {truncate_at}");
+        assert!(
+            result.is_err(),
+            "should fail when truncated at {truncate_at}"
+        );
     }
 
     std::fs::remove_dir_all(&dir).ok();
@@ -224,7 +227,10 @@ fn inspect_truncated_file() {
 #[test]
 fn open_nonexistent_file() {
     let passphrase = Passphrase::new(b"test".to_vec());
-    let result = tomb::open_file(std::path::Path::new("/tmp/tomb_does_not_exist.tomb"), &passphrase);
+    let result = tomb::open_file(
+        std::path::Path::new("/tmp/tomb_does_not_exist.tomb"),
+        &passphrase,
+    );
     assert!(result.is_err());
 }
 
