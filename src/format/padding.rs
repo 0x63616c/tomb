@@ -2,6 +2,9 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 
 fn ilog2(n: usize) -> u32 {
+    if n == 0 {
+        return 0;
+    }
     (usize::BITS - 1) - n.leading_zeros()
 }
 
@@ -29,8 +32,15 @@ pub fn pad(data: &[u8]) -> Vec<u8> {
     out
 }
 
-pub fn unpad(data: &[u8], original_size: usize) -> Vec<u8> {
-    data[..original_size].to_vec()
+pub fn unpad(data: &[u8], original_size: usize) -> crate::Result<Vec<u8>> {
+    if original_size > data.len() {
+        return Err(crate::Error::Format(format!(
+            "original size {} exceeds padded data length {}",
+            original_size,
+            data.len()
+        )));
+    }
+    Ok(data[..original_size].to_vec())
 }
 
 #[cfg(test)]
@@ -69,7 +79,7 @@ mod tests {
         let data = b"hello world this is test data";
         let padded = pad(data);
         assert!(padded.len() >= data.len());
-        let unpadded = unpad(&padded, data.len());
+        let unpadded = unpad(&padded, data.len()).unwrap();
         assert_eq!(unpadded, data);
     }
 }

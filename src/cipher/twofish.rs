@@ -30,7 +30,12 @@ impl CipherLayer for TwofishCtr {
     }
 
     fn encrypt(&self, key: &LayerKey, nonce: &[u8], data: &[u8]) -> Result<Vec<u8>> {
-        assert_eq!(nonce.len(), 16, "twofish CTR nonce must be 16 bytes");
+        if nonce.len() != 16 {
+            return Err(crate::Error::Encryption(format!(
+                "twofish CTR nonce must be 16 bytes, got {}",
+                nonce.len()
+            )));
+        }
         let mut buffer = data.to_vec();
         let mut cipher = TwofishCtrMode::new(key.as_bytes().into(), nonce.into());
         cipher.apply_keystream(&mut buffer);
