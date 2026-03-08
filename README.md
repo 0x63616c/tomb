@@ -29,6 +29,15 @@ tomb verify <file.tomb>          # Confirm a file is decryptable
 tomb inspect <file.tomb>         # View public header (no passphrase needed)
 ```
 
+## Build from source
+
+```
+git clone https://github.com/0x63616c/tomb.git
+cd tomb
+cargo build --release
+# Binary at target/release/tomb
+```
+
 ## How it works
 
 1. You provide (or generate) a 21-word diceware passphrase
@@ -43,8 +52,46 @@ tomb inspect <file.tomb>         # View public header (no passphrase needed)
 
 256-bit symmetric keys are already quantum-resistant. Grover's algorithm halves the effective bit security (271 -> 135 bits), which is still far beyond brute-force range. See [How Long to Crack](docs/how-long-to-crack.md) for the full breakdown.
 
+## Threat model
+
+tomb protects one thing: the contents of your file. It assumes:
+
+- **The attacker has the ciphertext.** The `.tomb` file is public. Posted on GitHub, stored on a USB drive, uploaded to cloud storage, intercepted in transit. Doesn't matter.
+- **The attacker has the source code.** Kerckhoffs's principle. The security comes from the passphrase, not from secrecy of the algorithm.
+- **The attacker has unlimited time.** Decades, centuries. The math doesn't care.
+- **The attacker has nation-state resources.** Custom hardware, data centers, quantum computers (Grover's algorithm halves symmetric key strength, still not enough).
+
+tomb does NOT protect:
+
+- **Metadata.** The filename of the `.tomb` file itself may reveal information. `tax-returns-2024.tomb` tells an attacker what's inside. Use a random filename (e.g., `tomb seal secrets.json -o backup.tomb`).
+- **The original file.** tomb does not securely delete the source file. After sealing, delete it yourself. On SSDs, "secure delete" is unreliable. Consider full-disk encryption for your working environment.
+- **The passphrase in memory.** tomb zeroes sensitive memory and uses mlock to prevent swapping, but a compromised OS with root access can read process memory. tomb is not a defense against a compromised machine.
+- **Availability.** If the `.tomb` file is corrupted or lost, the data is gone. Keep multiple copies. tomb has no error correction (yet).
+
+## Verify a release
+
+Every release includes a `SHA256SUMS` file containing checksums for all binaries.
+
+```
+# Download the binary and checksum file
+curl -LO https://github.com/0x63616c/tomb/releases/latest/download/tomb-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/0x63616c/tomb/releases/latest/download/SHA256SUMS
+
+# Verify
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+On macOS, use `shasum -a 256 -c SHA256SUMS` instead.
+
+## File format
+
+The `.tomb` binary format is fully documented in [FORMAT-SPEC.md](docs/FORMAT-SPEC.md). The spec is precise enough to reimplement a decoder in any language without access to the Rust source code.
+
+If you find a `.tomb` file in 30 years and the tomb binary is gone, the format spec tells you exactly how to decode it.
+
 ## Design
 
 - [Design Decisions](docs/DESIGN-DECISIONS.md) - rationale behind every cryptographic choice
+- [Format Specification](docs/FORMAT-SPEC.md) - byte-level binary format documentation
 - [Requirements](docs/REQUIREMENTS.md) - complete spec
 - [Future Ideas](docs/FUTURE.md) - ideas not yet committed to
