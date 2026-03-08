@@ -66,7 +66,7 @@ fn bench_breakdown_10mb() {
         commitment: keys.commitment.as_bytes().to_vec(),
     };
     let start = Instant::now();
-    let header_bytes = header.serialize();
+    let header_bytes = header.serialize().unwrap();
     let mut tomb_data = header_bytes;
     tomb_data.extend_from_slice(&sealed);
     std::fs::write(&output, &tomb_data).unwrap();

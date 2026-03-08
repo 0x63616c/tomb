@@ -105,6 +105,7 @@ pub struct DerivedKeys {
 pub struct OpenedFile {
     pub data: Vec<u8>,
     pub filename: String,
+    pub note: Option<String>,
 }
 
 pub struct SealConfig {
@@ -172,7 +173,7 @@ pub fn prepare_payload(input_path: &Path, note: Option<&str>) -> Result<Prepared
         note: note.map(String::from),
     };
 
-    let mut payload = inner.serialize();
+    let mut payload = inner.serialize()?;
     payload.extend_from_slice(&plaintext);
     let padded = padding::pad(&payload);
     payload.zeroize();
@@ -215,7 +216,7 @@ pub fn encrypt_and_write(
 ) -> Result<()> {
     let sealed = pipeline.seal(states, padded)?;
 
-    let header_bytes = header.serialize();
+    let header_bytes = header.serialize()?;
     let mut tomb_data = header_bytes;
     tomb_data.extend_from_slice(&sealed);
 
@@ -255,7 +256,8 @@ pub fn open_file(file_path: &Path, passphrase: &Passphrase) -> Result<OpenedFile
 
     // Parse inner header
     let (inner, inner_len) = format::InnerHeader::deserialize(&decrypted)?;
-    let original_size = inner.original_size as usize;
+    let original_size =
+        usize::try_from(inner.original_size).map_err(|_| Error::DecryptionFailed)?;
     let plaintext_end = inner_len
         .checked_add(original_size)
         .ok_or(Error::DecryptionFailed)?;
@@ -279,6 +281,7 @@ pub fn open_file(file_path: &Path, passphrase: &Passphrase) -> Result<OpenedFile
     Ok(OpenedFile {
         data: plaintext_data,
         filename: inner.filename,
+        note: inner.note,
     })
 }
 

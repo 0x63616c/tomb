@@ -25,7 +25,7 @@ impl PublicHeader {
     ///   [layer_count:1][foreach: id:1, nonce_size:1]
     ///   [salt:32][commitment:32]
     ///   [header_len:4 LE] (total length including this field)
-    pub fn serialize(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
 
         out.extend_from_slice(b"TOMB\n");
@@ -43,15 +43,20 @@ impl PublicHeader {
             out.push(layer.nonce_size);
         }
 
-        debug_assert_eq!(self.salt.len(), 32, "salt must be 32 bytes");
-        debug_assert_eq!(self.commitment.len(), 32, "commitment must be 32 bytes");
+        if self.salt.len() != 32 {
+            return Err(Error::Format("salt must be 32 bytes".into()));
+        }
+        if self.commitment.len() != 32 {
+            return Err(Error::Format("commitment must be 32 bytes".into()));
+        }
         out.extend_from_slice(&self.salt);
         out.extend_from_slice(&self.commitment);
 
-        let total_len = (out.len() + 4) as u32;
+        let total_len =
+            u32::try_from(out.len() + 4).map_err(|_| Error::Format("header too large".into()))?;
         out.extend_from_slice(&total_len.to_le_bytes());
 
-        out
+        Ok(out)
     }
 
     pub fn deserialize(data: &[u8]) -> Result<(Self, usize)> {
@@ -183,7 +188,7 @@ mod tests {
             commitment: vec![0xBB; 32],
         };
 
-        let bytes = header.serialize();
+        let bytes = header.serialize().unwrap();
         assert_eq!(&bytes[..5], b"TOMB\n");
 
         let (parsed, consumed) = PublicHeader::deserialize(&bytes).unwrap();
@@ -209,7 +214,7 @@ mod tests {
             salt: vec![0; 32],
             commitment: vec![0; 32],
         };
-        let bytes = header.serialize();
+        let bytes = header.serialize().unwrap();
         assert_eq!(&bytes[..5], b"TOMB\n");
     }
 
@@ -246,7 +251,7 @@ mod tests {
             salt: vec![0xAA; 32],
             commitment: vec![0xBB; 32],
         };
-        header.serialize()
+        header.serialize().unwrap()
     }
 
     #[test]
