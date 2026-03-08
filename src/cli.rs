@@ -112,7 +112,7 @@ fn passphrase_for_seal(passphrase_file: Option<&Path>) -> Result<Passphrase> {
     }
 
     let mut p1_raw = prompt_passphrase("Enter passphrase (or press Enter to generate one): ")?;
-    let p1 = normalize_whitespace(&p1_raw);
+    let mut p1 = normalize_whitespace(&p1_raw);
     p1_raw.zeroize();
 
     if p1.is_empty() {
@@ -133,9 +133,10 @@ fn passphrase_for_seal(passphrase_file: Option<&Path>) -> Result<Passphrase> {
         let mut entered_raw = prompt_passphrase("Passphrase: ")?;
         let mut entered = normalize_whitespace(&entered_raw);
         entered_raw.zeroize();
-        let generated = words.join(" ");
+        let mut generated = words.join(" ");
         if !bool::from(entered.as_bytes().ct_eq(generated.as_bytes())) {
             entered.zeroize();
+            generated.zeroize();
             return Err(Error::PassphraseMismatch);
         }
         entered.zeroize();
@@ -147,6 +148,7 @@ fn passphrase_for_seal(passphrase_file: Option<&Path>) -> Result<Passphrase> {
         p2_raw.zeroize();
         if !bool::from(p1.as_bytes().ct_eq(p2.as_bytes())) {
             p2.zeroize();
+            p1.zeroize();
             return Err(Error::PassphraseMismatch);
         }
         p2.zeroize();
