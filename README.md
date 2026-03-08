@@ -8,7 +8,7 @@ Governments, corporations, future civilizations, anyone with unlimited resources
 
 Every cryptographic choice in tomb is designed around one goal: **make brute force mathematically impossible, not just impractical.**
 
-Not "would take mass billion years." Not "infeasible with current hardware." Impossible. Period.
+Not "would take billions of years." Not "infeasible with current hardware." Impossible. Period.
 
 - **271 bits of passphrase entropy** (21 diceware words). There are ~10^80 atoms in the observable universe. 2^271 is ~10^81. You would need more guesses than there are atoms to try every passphrase, even if each guess took a single Planck time unit (5.39 x 10^-44 seconds), running on every atom simultaneously.
 - **2GB memory-hard KDF chain** (scrypt 1GB + Argon2id 1GB). Each guess requires 2GB of RAM. You cannot parallelise with GPUs, ASICs, or any known hardware shortcut. Two different KDF algorithms from different designers, different internal primitives (Salsa20/8 vs Blake2b), so a cryptanalytic break in one still leaves the other standing.
@@ -21,6 +21,7 @@ This is not security theatre. This is the math.
 ## Usage
 
 ```
+tomb generate             # Generate a 21-word passphrase
 tomb seal <file>          # Encrypt a file
 tomb open <file.tomb>     # Decrypt a file
 tomb verify <file.tomb>   # Confirm a file is decryptable
@@ -37,6 +38,12 @@ tomb inspect <file.tomb>  # View public header (no passphrase needed)
 6. tomb automatically verifies the sealed file by decrypting and comparing checksums
 7. A single `.tomb` file is produced. Store it anywhere.
 
+## Quantum resistance
+
+256-bit symmetric keys are already quantum-resistant. Grover's algorithm halves the effective bit security (271 -> 135 bits), which is still far beyond brute-force range. See [How Long to Crack](docs/how-long-to-crack.md) for the full breakdown.
+
 ## Design
 
-See [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md) for the full rationale behind every choice, and [REQUIREMENTS.md](REQUIREMENTS.md) for the complete spec.
+- [Design Decisions](docs/DESIGN-DECISIONS.md) - rationale behind every cryptographic choice
+- [Requirements](docs/REQUIREMENTS.md) - complete spec
+- [Future Ideas](docs/FUTURE.md) - ideas not yet committed to
