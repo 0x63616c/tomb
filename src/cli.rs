@@ -107,8 +107,7 @@ pub fn run() -> Result<()> {
         Command::Seal { file, output, note } => {
             let output = output.unwrap_or_else(|| {
                 let mut p = file.clone();
-                let name = p.file_name().unwrap().to_string_lossy().to_string();
-                p.set_file_name(format!("{name}.tomb"));
+                p.set_extension("tomb");
                 p
             });
 
@@ -120,11 +119,17 @@ pub fn run() -> Result<()> {
                 eprintln!("Consider using -o with a neutral name to avoid leaking metadata.");
             }
 
+            let input_size = fs::metadata(&file)?.len();
+
             let passphrase = prompt_passphrase_for_seal()?;
+            println!("Deriving keys (this takes a few seconds)...");
             crate::seal(&file, &output, &passphrase, note.as_deref())?;
 
-            let meta = fs::metadata(&output)?;
-            println!("Sealed -> {} ({} bytes)", output.display(), meta.len());
+            let output_size = fs::metadata(&output)?.len();
+            let overhead = output_size as i64 - input_size as i64;
+            let sign = if overhead >= 0 { "+" } else { "" };
+            println!("Sealed -> {} ({} bytes, was {} bytes, {}{} bytes)",
+                output.display(), output_size, input_size, sign, overhead);
             println!("Remember to delete the original file.");
         }
         Command::Open { file, output } => {
