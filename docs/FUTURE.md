@@ -31,3 +31,19 @@ Two passphrases: real one decrypts real data, decoy one decrypts plausible fake 
 ## Heartbeat / Proof-of-Life
 
 `tomb heartbeat` logs a timestamp each time you successfully verify a file. Warns if you haven't verified in N months. Not crypto, just operational discipline for decades-long backups. Could integrate with cron or launchd.
+
+## tombui: Terminal UI
+
+A dedicated TUI application built on top of the tomb library. Separate binary (`tombui`) that provides a rich interactive interface for managing .tomb files without memorizing CLI flags.
+
+**Why:** The CLI is great for scripting and power users, but a TUI makes tomb more approachable. Browse files, seal/open with guided prompts, inspect headers visually, monitor KDF progress with real-time bars. All without leaving the terminal.
+
+**Possible features:**
+- File browser for selecting input files and .tomb archives
+- Guided seal flow: pick file, enter passphrase (with strength indicator), watch progress
+- Inspect view: visual breakdown of header, KDF params, cipher layers, file metadata
+- Verify status dashboard for multiple .tomb files at once
+- Passphrase generation with copy-to-clipboard
+- Keyboard-driven (vim-style navigation)
+
+**Tech:** Likely `ratatui` + `crossterm`. Separate crate in a workspace (`tombui/`), depends on `tomb` as a library. Keeps the core crate dependency-free of TUI concerns.
