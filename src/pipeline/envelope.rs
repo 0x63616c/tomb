@@ -180,4 +180,47 @@ mod tests {
         };
         assert!(!env.verify_mac(&wrong_key));
     }
+
+    #[test]
+    fn deserialize_empty() {
+        assert!(LayerEnvelope::deserialize(&[]).is_err());
+    }
+
+    #[test]
+    fn deserialize_single_byte() {
+        assert!(LayerEnvelope::deserialize(&[0x01]).is_err());
+    }
+
+    #[test]
+    fn deserialize_invalid_cipher_id() {
+        let data = [0xFF, 0x10]; // invalid cipher ID, nonce_len=16
+        assert!(LayerEnvelope::deserialize(&data).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_nonce() {
+        // Valid cipher ID and nonce_len=16, but only 2 bytes of nonce
+        let mut data = vec![CipherId::Aes as u8, 16];
+        data.extend_from_slice(&[0u8; 2]); // only 2 of 16 nonce bytes
+        assert!(LayerEnvelope::deserialize(&data).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_payload() {
+        // Valid header but payload is shorter than declared length
+        let mac_key = LayerKey([0xCC; 32]);
+        let nonce = vec![0u8; 16];
+        let payload = vec![0u8; 100];
+        let mac = LayerEnvelope::compute_mac(&mac_key, CipherId::Twofish, &nonce, &payload);
+        let env = LayerEnvelope {
+            layer_id: CipherId::Twofish,
+            nonce,
+            payload,
+            mac,
+        };
+        let bytes = env.serialize();
+        // Truncate: cut off last 50 bytes (part of payload + mac)
+        let truncated = &bytes[..bytes.len() - 50];
+        assert!(LayerEnvelope::deserialize(truncated).is_err());
+    }
 }

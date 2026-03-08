@@ -464,4 +464,28 @@ mod tests {
         };
         assert_eq!(params.memory_display(), "1024MB");
     }
+
+    #[test]
+    fn kdf_params_deserialize_empty() {
+        assert!(KdfParams::deserialize(&[]).is_err());
+    }
+
+    #[test]
+    fn kdf_params_deserialize_unknown_id() {
+        assert!(KdfParams::deserialize(&[0xFF]).is_err());
+    }
+
+    #[test]
+    fn kdf_params_deserialize_truncated_scrypt() {
+        // Scrypt ID but only 5 bytes (needs 10)
+        let data = [KdfId::Scrypt as u8, 10, 0, 0, 0];
+        assert!(KdfParams::deserialize(&data).is_err());
+    }
+
+    #[test]
+    fn kdf_params_deserialize_truncated_argon2id() {
+        // Argon2id ID but only 5 bytes (needs 13)
+        let data = [KdfId::Argon2id as u8, 0, 0, 0, 0];
+        assert!(KdfParams::deserialize(&data).is_err());
+    }
 }

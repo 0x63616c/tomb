@@ -168,6 +168,93 @@ fn empty_file_round_trip() {
 }
 
 #[test]
+fn open_truncated_file() {
+    let dir = test_dir("truncated");
+    let input = dir.join("data.txt");
+    let output = dir.join("data.tomb");
+
+    std::fs::write(&input, b"test data").unwrap();
+    let passphrase = Passphrase::new(b"test passphrase".to_vec());
+    tomb::seal(
+        &input,
+        &output,
+        &passphrase,
+        None,
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
+
+    // Truncate at various points
+    let full = std::fs::read(&output).unwrap();
+    for truncate_at in [0, 3, 5, 10, 50, full.len() / 2] {
+        let truncated_path = dir.join(format!("trunc_{truncate_at}.tomb"));
+        std::fs::write(&truncated_path, &full[..truncate_at]).unwrap();
+        let result = tomb::open_file(&truncated_path, &passphrase);
+        assert!(result.is_err(), "should fail when truncated at {truncate_at}");
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn open_random_garbage() {
+    let dir = test_dir("garbage");
+    let garbage_path = dir.join("garbage.tomb");
+    std::fs::write(&garbage_path, b"this is not a tomb file at all").unwrap();
+
+    let passphrase = Passphrase::new(b"test".to_vec());
+    let result = tomb::open_file(&garbage_path, &passphrase);
+    assert!(result.is_err());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn open_empty_file() {
+    let dir = test_dir("empty_tomb");
+    let empty_path = dir.join("empty.tomb");
+    std::fs::write(&empty_path, b"").unwrap();
+
+    let passphrase = Passphrase::new(b"test".to_vec());
+    let result = tomb::open_file(&empty_path, &passphrase);
+    assert!(result.is_err());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn inspect_truncated_file() {
+    let dir = test_dir("inspect_trunc");
+    let input = dir.join("data.txt");
+    let output = dir.join("data.tomb");
+
+    std::fs::write(&input, b"test").unwrap();
+    let passphrase = Passphrase::new(b"test".to_vec());
+    tomb::seal(
+        &input,
+        &output,
+        &passphrase,
+        None,
+        &tomb::SealConfig::test(),
+    )
+    .unwrap();
+
+    // Truncate to just the magic bytes
+    let truncated_path = dir.join("trunc.tomb");
+    std::fs::write(&truncated_path, b"TOMB\n\x01").unwrap();
+    assert!(tomb::inspect_file(&truncated_path).is_err());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn open_nonexistent_file() {
+    let passphrase = Passphrase::new(b"test".to_vec());
+    let result = tomb::open_file(std::path::Path::new("/tmp/tomb_does_not_exist.tomb"), &passphrase);
+    assert!(result.is_err());
+}
+
+#[test]
 fn note_preserved() {
     let dir = test_dir("note");
     let input = dir.join("noted.txt");

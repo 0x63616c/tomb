@@ -210,4 +210,127 @@ mod tests {
         let bytes = header.serialize();
         assert_eq!(&bytes[..5], b"TOMB\n");
     }
+
+    fn valid_header_bytes() -> Vec<u8> {
+        let header = PublicHeader {
+            version_major: FORMAT_VERSION_MAJOR,
+            version_minor: FORMAT_VERSION_MINOR,
+            kdf_chain: vec![
+                KdfParams::Scrypt {
+                    log_n: 10,
+                    r: 8,
+                    p: 1,
+                },
+                KdfParams::Argon2id {
+                    memory_kib: 1024,
+                    iterations: 1,
+                    parallelism: 1,
+                },
+            ],
+            layers: vec![
+                LayerDescriptor {
+                    id: CipherId::Twofish,
+                    nonce_size: 16,
+                },
+                LayerDescriptor {
+                    id: CipherId::Aes,
+                    nonce_size: 16,
+                },
+                LayerDescriptor {
+                    id: CipherId::XChaCha,
+                    nonce_size: 24,
+                },
+            ],
+            salt: vec![0xAA; 32],
+            commitment: vec![0xBB; 32],
+        };
+        header.serialize()
+    }
+
+    #[test]
+    fn deserialize_empty_data() {
+        assert!(PublicHeader::deserialize(&[]).is_err());
+    }
+
+    #[test]
+    fn deserialize_wrong_magic() {
+        let mut bytes = valid_header_bytes();
+        bytes[0] = b'X';
+        assert!(PublicHeader::deserialize(&bytes).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_after_magic() {
+        assert!(PublicHeader::deserialize(b"TOMB\n").is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_after_version() {
+        assert!(PublicHeader::deserialize(b"TOMB\n\x01\x00").is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_kdf_params() {
+        // Magic + version + kdf_count=2, but no KDF data
+        let data = b"TOMB\n\x01\x00\x02";
+        assert!(PublicHeader::deserialize(data).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_layer_data() {
+        let bytes = valid_header_bytes();
+        // Find where layers start: after magic(5) + version(2) + kdf_count(1) + kdf_data + layer_count(1)
+        // Truncate right after layer_count byte, cutting off actual layer descriptors
+        let (header, _) = PublicHeader::deserialize(&bytes).unwrap();
+        // Rebuild with just enough to get past KDFs but truncate layers
+        let mut partial = Vec::new();
+        partial.extend_from_slice(b"TOMB\n");
+        partial.push(header.version_major);
+        partial.push(header.version_minor);
+        partial.push(0); // 0 KDFs
+        partial.push(3); // 3 layers, but no layer data follows
+        assert!(PublicHeader::deserialize(&partial).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_salt() {
+        // Valid up to layers, but missing salt/commitment
+        let mut partial = Vec::new();
+        partial.extend_from_slice(b"TOMB\n");
+        partial.push(1);
+        partial.push(0);
+        partial.push(0); // 0 KDFs
+        partial.push(0); // 0 layers
+        // Missing salt and commitment
+        assert!(PublicHeader::deserialize(&partial).is_err());
+    }
+
+    #[test]
+    fn deserialize_invalid_cipher_id() {
+        let mut partial = Vec::new();
+        partial.extend_from_slice(b"TOMB\n");
+        partial.push(1);
+        partial.push(0);
+        partial.push(0); // 0 KDFs
+        partial.push(1); // 1 layer
+        partial.push(0xFF); // invalid cipher ID
+        partial.push(16); // nonce_size
+        partial.extend_from_slice(&[0; 32]); // salt
+        partial.extend_from_slice(&[0; 32]); // commitment
+        let total_len = (partial.len() + 4) as u32;
+        partial.extend_from_slice(&total_len.to_le_bytes());
+        assert!(PublicHeader::deserialize(&partial).is_err());
+    }
+
+    #[test]
+    fn deserialize_header_length_mismatch() {
+        let mut bytes = valid_header_bytes();
+        // Corrupt the header_len field (last 4 bytes) to a wrong value
+        let len = bytes.len();
+        bytes[len - 4..].copy_from_slice(&999u32.to_le_bytes());
+        match PublicHeader::deserialize(&bytes) {
+            Err(e) => assert!(format!("{e}").contains("header length mismatch")),
+            Ok(_) => panic!("expected error"),
+        }
+    }
 }

@@ -172,4 +172,87 @@ mod tests {
         let (parsed, _) = InnerHeader::deserialize(&bytes).unwrap();
         assert!(parsed.note.is_none());
     }
+
+    fn valid_inner_bytes() -> Vec<u8> {
+        let header = InnerHeader {
+            filename: "test.txt".into(),
+            original_size: 100,
+            checksum: [0xAA; 64],
+            sealed_at: 1700000000,
+            tomb_version: "0.1.0".into(),
+            note: Some("a note".into()),
+        };
+        header.serialize()
+    }
+
+    #[test]
+    fn deserialize_empty() {
+        assert!(InnerHeader::deserialize(&[]).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_filename_length() {
+        // Only 1 byte, need 2 for u16
+        assert!(InnerHeader::deserialize(&[0x01]).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_filename_data() {
+        // Says filename is 10 bytes but only provides 2
+        let data = [0x0A, 0x00, b'a', b'b'];
+        assert!(InnerHeader::deserialize(&data).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_checksum() {
+        // Valid filename, valid original_size, but not enough bytes for 64-byte checksum
+        let mut data = Vec::new();
+        let fname = b"f.txt";
+        data.extend_from_slice(&(fname.len() as u16).to_le_bytes());
+        data.extend_from_slice(fname);
+        data.extend_from_slice(&100u64.to_le_bytes()); // original_size
+        data.extend_from_slice(&[0u8; 10]); // only 10 of 64 checksum bytes
+        assert!(InnerHeader::deserialize(&data).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_note_data() {
+        // Build valid header up to note flag, then truncate note content
+        let bytes = valid_inner_bytes();
+        // Cut off last 3 bytes (part of note data)
+        let truncated = &bytes[..bytes.len() - 3];
+        assert!(InnerHeader::deserialize(truncated).is_err());
+    }
+
+    #[test]
+    fn deserialize_truncated_after_checksum() {
+        // Valid through checksum but missing sealed_at
+        let mut data = Vec::new();
+        let fname = b"f.txt";
+        data.extend_from_slice(&(fname.len() as u16).to_le_bytes());
+        data.extend_from_slice(fname);
+        data.extend_from_slice(&100u64.to_le_bytes());
+        data.extend_from_slice(&[0xAA; 64]); // full checksum
+        // Missing: sealed_at, version, note
+        assert!(InnerHeader::deserialize(&data).is_err());
+    }
+
+    #[test]
+    fn deserialize_invalid_utf8_filename() {
+        let mut data = Vec::new();
+        let bad_fname: &[u8] = &[0xFF, 0xFE]; // invalid UTF-8
+        data.extend_from_slice(&(bad_fname.len() as u16).to_le_bytes());
+        data.extend_from_slice(bad_fname);
+        data.extend_from_slice(&100u64.to_le_bytes());
+        data.extend_from_slice(&[0; 64]); // checksum
+        data.extend_from_slice(&0u64.to_le_bytes()); // sealed_at
+        let ver = b"0.1.0";
+        data.extend_from_slice(&(ver.len() as u16).to_le_bytes());
+        data.extend_from_slice(ver);
+        data.push(0); // no note
+        match InnerHeader::deserialize(&data) {
+            Err(e) => assert!(format!("{e}").contains("utf8")),
+            Ok(_) => panic!("expected error"),
+        }
+    }
 }
