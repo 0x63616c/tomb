@@ -19,7 +19,8 @@ use zeroize::Zeroize;
 use crate::format::inner::InnerHeader;
 use crate::format::padding;
 use crate::key::{MasterKey, Passphrase, Commitment};
-use crate::key::derive::{Derive, KdfParams, ScryptDerive, Argon2idDerive, chain_derive};
+use crate::cipher::CipherId;
+use crate::key::derive::{Derive, KdfParams, chain_derive};
 use crate::key::expand::{LayerState, expand_layer_keys};
 use crate::key::commit::compute_commitment;
 use crate::pipeline::Pipeline;
@@ -97,6 +98,33 @@ pub struct OpenedFile {
     pub filename: String,
 }
 
+pub struct SealConfig {
+    pub kdf_chain: Vec<KdfParams>,
+    pub cipher_ids: Vec<CipherId>,
+}
+
+impl SealConfig {
+    pub fn production() -> Self {
+        Self {
+            kdf_chain: vec![
+                KdfParams::Scrypt { log_n: 20, r: 8, p: 1 },
+                KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 },
+            ],
+            cipher_ids: vec![CipherId::Twofish, CipherId::Aes, CipherId::XChaCha],
+        }
+    }
+
+    pub fn test() -> Self {
+        Self {
+            kdf_chain: vec![
+                KdfParams::Scrypt { log_n: 10, r: 8, p: 1 },
+                KdfParams::Argon2id { memory_kib: 1024, iterations: 1, parallelism: 1 },
+            ],
+            cipher_ids: vec![CipherId::Twofish, CipherId::Aes, CipherId::XChaCha],
+        }
+    }
+}
+
 // ── Library API ─────────────────────────────────────────────────────────
 
 pub fn prepare_payload(input_path: &Path, note: Option<&str>) -> Result<PreparedPayload> {
@@ -126,38 +154,16 @@ pub fn prepare_payload(input_path: &Path, note: Option<&str>) -> Result<Prepared
     Ok(PreparedPayload { padded, checksum, inner })
 }
 
-/// Production key derivation (1GB scrypt + 1GB Argon2id)
-pub fn derive_keys(passphrase: &Passphrase, pipeline: &Pipeline) -> Result<DerivedKeys> {
-    derive_keys_internal(
-        passphrase,
-        pipeline,
-        ScryptDerive::production(),
-        Argon2idDerive::production(),
-    )
-}
-
-/// Test key derivation (tiny params, fast)
-pub fn derive_keys_with_params(passphrase: &Passphrase, pipeline: &Pipeline) -> Result<DerivedKeys> {
-    derive_keys_internal(
-        passphrase,
-        pipeline,
-        ScryptDerive::test(),
-        Argon2idDerive::test(),
-    )
-}
-
-fn derive_keys_internal(
+pub fn derive_keys(
     passphrase: &Passphrase,
     pipeline: &Pipeline,
-    scrypt: ScryptDerive,
-    argon2: Argon2idDerive,
+    kdf_chain: &[KdfParams],
 ) -> Result<DerivedKeys> {
     let salt = random_bytes(32);
 
-    let kdfs: Vec<Box<dyn Derive>> = vec![
-        Box::new(scrypt),
-        Box::new(argon2),
-    ];
+    let kdfs: Vec<Box<dyn Derive>> = kdf_chain.iter()
+        .map(|p| p.to_derive())
+        .collect();
     let master = chain_derive(&kdfs, passphrase.as_bytes(), &salt)?;
 
     let layer_info = pipeline.layer_info();
@@ -192,20 +198,13 @@ pub fn open_file(
     file_path: &Path,
     passphrase: &Passphrase,
 ) -> Result<OpenedFile> {
-    open_file_with_params(file_path, passphrase, ScryptDerive::production(), Argon2idDerive::production())
-}
-
-pub fn open_file_with_params(
-    file_path: &Path,
-    passphrase: &Passphrase,
-    scrypt: ScryptDerive,
-    argon2: Argon2idDerive,
-) -> Result<OpenedFile> {
     let tomb_data = fs::read(file_path)?;
     let (header, header_len) = format::PublicHeader::deserialize(&tomb_data)?;
 
-    // Verify key commitment (constant-time via Commitment::verify)
-    let kdfs: Vec<Box<dyn Derive>> = vec![Box::new(scrypt), Box::new(argon2)];
+    // Reconstruct KDFs from header params
+    let kdfs: Vec<Box<dyn Derive>> = header.kdf_chain.iter()
+        .map(|p| p.to_derive())
+        .collect();
     let master = chain_derive(&kdfs, passphrase.as_bytes(), &header.salt)?;
     let commitment = compute_commitment(&master);
     let stored = Commitment::from_bytes(header.commitment.as_slice().try_into()
@@ -253,43 +252,12 @@ pub fn verify_sealed(
     output_path: &Path,
     passphrase: &Passphrase,
     expected_checksum: &[u8; 64],
-    scrypt: ScryptDerive,
-    argon2: Argon2idDerive,
 ) -> Result<()> {
-    let opened = open_file_with_params(output_path, passphrase, scrypt, argon2)?;
+    let opened = open_file(output_path, passphrase)?;
     let checksum: [u8; 64] = Sha512::digest(&opened.data).into();
     if !bool::from(checksum[..].ct_eq(&expected_checksum[..])) {
         return Err(Error::VerificationFailed);
     }
-    Ok(())
-}
-
-pub fn seal_with_params(
-    input_path: &Path,
-    output_path: &Path,
-    passphrase: &Passphrase,
-    note: Option<&str>,
-) -> Result<()> {
-    let mut prepared = prepare_payload(input_path, note)?;
-    let pipeline = Pipeline::default_tomb();
-    let keys = derive_keys_with_params(passphrase, &pipeline)?;
-
-    let header = format::PublicHeader {
-        version_major: format::FORMAT_VERSION_MAJOR,
-        version_minor: format::FORMAT_VERSION_MINOR,
-        kdf_chain: vec![
-            KdfParams::Scrypt { log_n: 10, r: 8, p: 1 },
-            KdfParams::Argon2id { memory_kib: 1024, iterations: 1, parallelism: 1 },
-        ],
-        layers: pipeline.layer_descriptors(),
-        salt: keys.salt.clone(),
-        commitment: keys.commitment.as_bytes().to_vec(),
-    };
-
-    encrypt_and_write(output_path, &header, &pipeline, &keys.states, &prepared.padded)?;
-    prepared.padded.zeroize();
-    verify_sealed(output_path, passphrase, &prepared.checksum, ScryptDerive::test(), Argon2idDerive::test())?;
-
     Ok(())
 }
 
@@ -298,18 +266,16 @@ pub fn seal(
     output_path: &Path,
     passphrase: &Passphrase,
     note: Option<&str>,
+    config: &SealConfig,
 ) -> Result<()> {
     let mut prepared = prepare_payload(input_path, note)?;
-    let pipeline = Pipeline::default_tomb();
-    let keys = derive_keys(passphrase, &pipeline)?;
+    let pipeline = Pipeline::from_cipher_ids(&config.cipher_ids)?;
+    let keys = derive_keys(passphrase, &pipeline, &config.kdf_chain)?;
 
     let header = format::PublicHeader {
         version_major: format::FORMAT_VERSION_MAJOR,
         version_minor: format::FORMAT_VERSION_MINOR,
-        kdf_chain: vec![
-            KdfParams::Scrypt { log_n: 20, r: 8, p: 1 },
-            KdfParams::Argon2id { memory_kib: 1_048_576, iterations: 4, parallelism: 4 },
-        ],
+        kdf_chain: config.kdf_chain.clone(),
         layers: pipeline.layer_descriptors(),
         salt: keys.salt.clone(),
         commitment: keys.commitment.as_bytes().to_vec(),
@@ -317,7 +283,7 @@ pub fn seal(
 
     encrypt_and_write(output_path, &header, &pipeline, &keys.states, &prepared.padded)?;
     prepared.padded.zeroize();
-    verify_sealed(output_path, passphrase, &prepared.checksum, ScryptDerive::production(), Argon2idDerive::production())?;
+    verify_sealed(output_path, passphrase, &prepared.checksum)?;
 
     Ok(())
 }
@@ -372,8 +338,9 @@ mod tests {
     #[test]
     fn derive_keys_produces_states() {
         let passphrase = key::Passphrase::new(b"test passphrase words here".to_vec());
-        let pipeline = pipeline::Pipeline::default_tomb();
-        let keys = derive_keys_with_params(&passphrase, &pipeline).unwrap();
+        let config = SealConfig::test();
+        let pipeline = pipeline::Pipeline::from_cipher_ids(&config.cipher_ids).unwrap();
+        let keys = derive_keys(&passphrase, &pipeline, &config.kdf_chain).unwrap();
         assert_eq!(keys.states.len(), 3);
         assert_eq!(keys.salt.len(), 32);
         assert_eq!(keys.commitment.as_bytes().len(), 32);
@@ -390,15 +357,10 @@ mod tests {
 
         let passphrase = key::Passphrase::new(b"test passphrase".to_vec());
 
-        seal_with_params(&input, &output, &passphrase, Some("test note")).unwrap();
+        seal(&input, &output, &passphrase, Some("test note"), &SealConfig::test()).unwrap();
         assert!(output.exists());
 
-        let opened = open_file_with_params(
-            &output,
-            &passphrase,
-            key::derive::ScryptDerive::test(),
-            key::derive::Argon2idDerive::test(),
-        ).unwrap();
+        let opened = open_file(&output, &passphrase).unwrap();
         assert_eq!(opened.data, b"top secret data for tomb test");
         assert_eq!(opened.filename, "secret.txt");
 

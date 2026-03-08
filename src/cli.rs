@@ -127,7 +127,7 @@ pub fn run() -> Result<()> {
 
             let passphrase = prompt_passphrase_for_seal()?;
             println!("Deriving keys (this takes a few seconds)...");
-            crate::seal(&file, &output, &passphrase, note.as_deref())?;
+            crate::seal(&file, &output, &passphrase, note.as_deref(), &crate::SealConfig::production())?;
 
             let output_size = fs::metadata(&output)?.len();
             let overhead = output_size as i64 - input_size as i64;
