@@ -92,6 +92,50 @@ fn prompt_passphrase(prompt: &str) -> Result<String> {
     Ok(pass)
 }
 
+/// Prompt for a passphrase that may be entered across multiple lines.
+///
+/// Keeps reading masked lines (via `rpassword`) and accumulating words until
+/// exactly `expected_words` have been entered. If a line pushes the total past
+/// the target, returns an error immediately — never silently truncates.
+///
+/// This handles all paste/typing styles:
+/// - All words on one line (single paste)
+/// - 7 words per line (copy-paste of the chunked display)
+/// - One word at a time
+fn prompt_passphrase_multiline(expected_words: usize) -> Result<String> {
+    let mut collected: Vec<String> = Vec::new();
+
+    loop {
+        let remaining = expected_words - collected.len();
+        let prompt = if collected.is_empty() {
+            format!("Passphrase ({expected_words} words): ")
+        } else {
+            format!("  ({remaining} words remaining): ")
+        };
+
+        let line =
+            rpassword::prompt_password(&prompt).map_err(|e| Error::Io(io::Error::other(e)))?;
+        let words: Vec<&str> = line.split_whitespace().collect();
+
+        if words.is_empty() {
+            continue;
+        }
+
+        collected.extend(words.iter().map(|w| w.to_string()));
+
+        if collected.len() == expected_words {
+            return Ok(collected.join(" "));
+        }
+
+        if collected.len() > expected_words {
+            return Err(Error::PassphraseInvalid(format!(
+                "too many words (expected {expected_words}, got {})",
+                collected.len()
+            )));
+        }
+    }
+}
+
 /// Normalize whitespace: trim leading/trailing, collapse multiple spaces to single space.
 fn normalize_whitespace(input: &str) -> String {
     input.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -130,9 +174,7 @@ fn passphrase_for_seal(passphrase_file: Option<&Path>) -> Result<Passphrase> {
         print!("\x1b[?1049l");
 
         println!("Re-enter your passphrase to confirm:");
-        let mut entered_raw = prompt_passphrase("Passphrase: ")?;
-        let mut entered = normalize_whitespace(&entered_raw);
-        entered_raw.zeroize();
+        let mut entered = prompt_passphrase_multiline(21)?;
         let mut generated = words.join(" ");
         if !bool::from(entered.as_bytes().ct_eq(generated.as_bytes())) {
             entered.zeroize();
